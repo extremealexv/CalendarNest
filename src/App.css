@@ -1,0 +1,274 @@
+.app {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.main-content {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Calendar Grid Styles */
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #e0e0e0;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.calendar-day {
+  background: white;
+  min-height: 120px;
+  padding: 8px;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+}
+
+.calendar-day:hover {
+  background: #f5f5f5;
+}
+
+.calendar-day.other-month {
+  background: #f9f9f9;
+  color: #999;
+}
+
+.calendar-day.today {
+  background: #e3f2fd;
+  border: 2px solid #2196F3;
+}
+
+.calendar-day.selected {
+  background: #bbdefb;
+}
+
+.day-number {
+  font-weight: bold;
+  margin-bottom: 4px;
+}
+
+.day-events {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.event-item {
+  background: #4CAF50;
+  color: white;
+  font-size: 11px;
+  padding: 2px 4px;
+  border-radius: 3px;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
+.event-item.user-1 { background: #4CAF50; }
+.event-item.user-2 { background: #2196F3; }
+.event-item.user-3 { background: #FF9800; }
+.event-item.user-4 { background: #9C27B0; }
+.event-item.user-5 { background: #F44336; }
+
+/* Week View Styles */
+.week-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.week-header {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  gap: 1px;
+  background: #f0f0f0;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.week-header-day {
+  padding: 15px 8px;
+  text-align: center;
+  font-weight: bold;
+  background: white;
+}
+
+.week-times {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.week-time-slot {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  gap: 1px;
+  min-height: 60px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.time-label {
+  padding: 8px;
+  text-align: right;
+  font-size: 12px;
+  color: #666;
+  background: #f9f9f9;
+  border-right: 2px solid #e0e0e0;
+}
+
+.time-slot {
+  background: white;
+  position: relative;
+  border-right: 1px solid #f0f0f0;
+}
+
+.time-slot:hover {
+  background: #f5f5f5;
+}
+
+/* Day View Styles */
+.day-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.day-header {
+  padding: 20px;
+  text-align: center;
+  background: white;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.day-header h2 {
+  margin: 0;
+  color: #333;
+}
+
+.day-schedule {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 20px;
+}
+
+/* Event Creation Modal */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: white;
+  padding: 30px;
+  border-radius: 15px;
+  max-width: 600px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+}
+
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  margin-bottom: 5px;
+  font-weight: bold;
+  color: #333;
+}
+
+.form-group input,
+.form-group textarea,
+.form-group select {
+  width: 100%;
+  padding: 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 8px;
+  font-size: 16px;
+  transition: border-color 0.2s ease;
+}
+
+.form-group input:focus,
+.form-group textarea:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #2196F3;
+}
+
+.participant-selector {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.participant-chip {
+  background: #e3f2fd;
+  color: #1976d2;
+  padding: 8px 16px;
+  border-radius: 20px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.participant-chip.selected {
+  background: #2196F3;
+  color: white;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 15px;
+  justify-content: flex-end;
+  margin-top: 30px;
+}
+
+/* Availability overlay */
+.availability-indicator {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+}
+
+.availability-free { background: #4CAF50; }
+.availability-busy { background: #F44336; }
+.availability-partial { background: #FF9800; }
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .calendar-day {
+    min-height: 80px;
+    padding: 4px;
+  }
+  
+  .day-number {
+    font-size: 14px;
+  }
+  
+  .event-item {
+    font-size: 10px;
+  }
+  
+  .modal-content {
+    padding: 20px;
+    margin: 20px;
+  }
+}

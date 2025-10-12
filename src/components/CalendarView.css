@@ -1,0 +1,263 @@
+.calendar-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  background: #f8f9fa;
+  overflow: hidden;
+}
+
+.calendar-content {
+  flex: 1;
+  margin: 20px;
+  background: white;
+  border-radius: 15px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Common Calendar Styles */
+.calendar-header {
+  padding: 20px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.calendar-title {
+  font-size: 1.5rem;
+  font-weight: 500;
+  margin: 0;
+}
+
+.calendar-actions {
+  display: flex;
+  gap: 10px;
+}
+
+.calendar-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* Event Styles */
+.event-item {
+  background: #4CAF50;
+  color: white;
+  padding: 4px 8px;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  margin: 1px 0;
+  cursor: pointer;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+  border-left: 4px solid transparent;
+}
+
+.event-item:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+  position: relative;
+}
+
+/* Account-specific event colors */
+.event-account-1 { 
+  background: linear-gradient(135deg, #4CAF50, #45a049);
+  border-left-color: #2e7d32;
+}
+
+.event-account-2 { 
+  background: linear-gradient(135deg, #2196F3, #1976d2);
+  border-left-color: #1565c0;
+}
+
+.event-account-3 { 
+  background: linear-gradient(135deg, #FF9800, #f57c00);
+  border-left-color: #ef6c00;
+}
+
+.event-account-4 { 
+  background: linear-gradient(135deg, #9C27B0, #7b1fa2);
+  border-left-color: #6a1b9a;
+}
+
+.event-account-5 { 
+  background: linear-gradient(135deg, #F44336, #d32f2f);
+  border-left-color: #c62828;
+}
+
+.event-account-6 { 
+  background: linear-gradient(135deg, #607D8B, #455a64);
+  border-left-color: #37474f;
+}
+
+/* All-day events */
+.event-all-day {
+  background: linear-gradient(135deg, #795548, #5d4037);
+  border-left-color: #4e342e;
+  font-weight: 500;
+}
+
+/* Busy/Conflicted events */
+.event-busy {
+  background: linear-gradient(135deg, #e53935, #c62828);
+  border-left-color: #b71c1c;
+  animation: pulse-red 2s infinite;
+}
+
+@keyframes pulse-red {
+  0% { opacity: 1; }
+  50% { opacity: 0.7; }
+  100% { opacity: 1; }
+}
+
+/* Event time display */
+.event-time {
+  font-size: 0.75rem;
+  opacity: 0.9;
+  margin-right: 4px;
+}
+
+.event-title {
+  font-weight: 500;
+}
+
+/* Availability indicators */
+.availability-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  border: 1px solid rgba(255, 255, 255, 0.8);
+}
+
+.availability-free { 
+  background: #4CAF50; 
+}
+
+.availability-busy { 
+  background: #f44336; 
+}
+
+.availability-partial { 
+  background: #FF9800; 
+}
+
+.availability-unknown { 
+  background: #9E9E9E; 
+}
+
+/* Time slot hover effects */
+.time-slot {
+  transition: background-color 0.2s ease;
+  cursor: pointer;
+  position: relative;
+}
+
+.time-slot:hover {
+  background: rgba(33, 150, 243, 0.05);
+}
+
+.time-slot:hover::after {
+  content: '+';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #2196F3;
+  font-size: 1.5rem;
+  font-weight: bold;
+  opacity: 0.7;
+}
+
+/* Loading states */
+.calendar-loading {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: #666;
+  font-size: 1.1rem;
+}
+
+.calendar-error {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: #f44336;
+  text-align: center;
+}
+
+.calendar-error h3 {
+  margin: 0 0 10px 0;
+  font-weight: 500;
+}
+
+.calendar-error p {
+  margin: 0;
+  opacity: 0.8;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .calendar-content {
+    margin: 10px;
+    border-radius: 10px;
+  }
+  
+  .calendar-header {
+    padding: 15px;
+  }
+  
+  .calendar-title {
+    font-size: 1.3rem;
+  }
+  
+  .event-item {
+    font-size: 0.8rem;
+    padding: 3px 6px;
+  }
+  
+  .event-time {
+    font-size: 0.7rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .calendar-content {
+    margin: 5px;
+    border-radius: 8px;
+  }
+  
+  .calendar-header {
+    padding: 10px;
+    flex-direction: column;
+    gap: 10px;
+    text-align: center;
+  }
+  
+  .calendar-title {
+    font-size: 1.1rem;
+  }
+  
+  .calendar-actions {
+    justify-content: center;
+  }
+  
+  .event-item {
+    font-size: 0.75rem;
+    padding: 2px 4px;
+  }
+}
