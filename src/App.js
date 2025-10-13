@@ -109,19 +109,28 @@ function App() {
     }
   };
 
+  console.log('App render - loading:', loading, 'isAuthenticated:', isAuthenticated, 'accounts:', accounts.length);
+
   if (loading) {
+    console.log('Rendering LoadingScreen');
     return <LoadingScreen />;
   }
 
   return (
-    <div className="app">
+    <div className="app" style={{ backgroundColor: 'red', minHeight: '100vh' }}>
+      <div style={{ position: 'absolute', top: '10px', left: '10px', color: 'white', backgroundColor: 'black', padding: '10px', zIndex: 9999 }}>
+        Debug: Auth={isAuthenticated ? 'YES' : 'NO'}, Accounts={accounts.length}, Loading={loading ? 'YES' : 'NO'}
+      </div>
       <Router>
         <Routes>
           <Route 
             path="/auth" 
             element={
               !isAuthenticated ? (
-                <AuthScreen onAuthenticate={handleAuthentication} />
+                <>
+                  {console.log('Rendering AuthScreen')}
+                  <AuthScreen onAuthenticate={handleAuthentication} />
+                </>
               ) : (
                 <Navigate to="/" replace />
               )
@@ -132,6 +141,7 @@ function App() {
             element={
               isAuthenticated ? (
                 <>
+                  {console.log('Rendering Calendar View')}
                   <Header 
                     accounts={accounts}
                     currentView={currentView}
@@ -150,7 +160,10 @@ function App() {
                   />
                 </>
               ) : (
-                <Navigate to="/auth" replace />
+                <>
+                  {console.log('Redirecting to /auth')}
+                  <Navigate to="/auth" replace />
+                </>
               )
             }
           />
