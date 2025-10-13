@@ -1,0 +1,254 @@
+.week-view {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.week-container {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.week-header {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  gap: 1px;
+  background: #f0f0f0;
+  border-bottom: 2px solid #e0e0e0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.time-column-header {
+  background: #f9f9f9;
+  padding: 15px 8px;
+  text-align: center;
+  font-weight: bold;
+  color: #666;
+  border-right: 2px solid #e0e0e0;
+}
+
+.week-header-day {
+  background: white;
+  padding: 15px 8px;
+  text-align: center;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  border: 2px solid transparent;
+}
+
+.week-header-day:hover {
+  background: #f5f5f5;
+}
+
+.week-header-day.selected {
+  background: #e3f2fd;
+  border-color: #2196F3;
+}
+
+.week-header-day.today {
+  background: #fff3e0;
+  border-color: #ff9800;
+}
+
+.day-name {
+  font-weight: bold;
+  color: #333;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  font-size: 0.9rem;
+}
+
+.day-date {
+  font-size: 1.2rem;
+  color: #666;
+}
+
+.week-header-day.today .day-date {
+  color: #ff9800;
+  font-weight: bold;
+}
+
+.week-body {
+  flex: 1;
+  overflow-y: auto;
+  background: #f8f9fa;
+}
+
+.week-time-row {
+  display: grid;
+  grid-template-columns: 80px repeat(7, 1fr);
+  gap: 1px;
+  min-height: 60px;
+  background: #e0e0e0;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.time-label {
+  background: #f9f9f9;
+  padding: 8px;
+  text-align: right;
+  font-size: 0.85rem;
+  color: #666;
+  border-right: 2px solid #e0e0e0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-end;
+  font-weight: 500;
+}
+
+.time-slot {
+  background: white;
+  position: relative;
+  cursor: pointer;
+  transition: background-color 0.2s ease;
+  padding: 2px;
+  min-height: 58px;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.time-slot:hover {
+  background: rgba(33, 150, 243, 0.05);
+}
+
+.time-slot.selected-day {
+  background: rgba(33, 150, 243, 0.02);
+  border-left: 3px solid #2196F3;
+}
+
+.week-event {
+  background: #4CAF50;
+  color: white;
+  padding: 4px 6px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  border-left: 3px solid transparent;
+  position: relative;
+  overflow: hidden;
+}
+
+.week-event:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  z-index: 5;
+}
+
+.week-event-time {
+  font-size: 0.7rem;
+  opacity: 0.9;
+  font-weight: 500;
+  margin-bottom: 1px;
+}
+
+.week-event-title {
+  font-weight: 500;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* Current time indicator */
+.current-time-line {
+  position: absolute;
+  left: 80px;
+  right: 0;
+  height: 2px;
+  background: #ff5722;
+  z-index: 15;
+  box-shadow: 0 0 4px rgba(255, 87, 34, 0.5);
+}
+
+.current-time-dot {
+  position: absolute;
+  left: -5px;
+  top: -3px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #ff5722;
+}
+
+/* Responsive design */
+@media (max-width: 1024px) {
+  .week-header {
+    grid-template-columns: 60px repeat(7, 1fr);
+  }
+  
+  .week-time-row {
+    grid-template-columns: 60px repeat(7, 1fr);
+  }
+  
+  .time-column-header,
+  .time-label {
+    font-size: 0.75rem;
+    padding: 6px 4px;
+  }
+  
+  .week-header-day {
+    padding: 10px 4px;
+  }
+  
+  .day-name {
+    font-size: 0.8rem;
+  }
+  
+  .day-date {
+    font-size: 1rem;
+  }
+}
+
+@media (max-width: 768px) {
+  .week-header {
+    grid-template-columns: 50px repeat(7, 1fr);
+  }
+  
+  .week-time-row {
+    grid-template-columns: 50px repeat(7, 1fr);
+    min-height: 50px;
+  }
+  
+  .time-label {
+    font-size: 0.7rem;
+    padding: 4px 2px;
+  }
+  
+  .week-header-day {
+    padding: 8px 2px;
+  }
+  
+  .week-event {
+    font-size: 0.7rem;
+    padding: 2px 4px;
+  }
+  
+  .week-event-time {
+    font-size: 0.65rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .day-name {
+    font-size: 0.7rem;
+  }
+  
+  .day-date {
+    font-size: 0.9rem;
+  }
+  
+  .week-event-title {
+    font-size: 0.65rem;
+  }
+  
+  .week-event-time {
+    display: none; /* Hide time on very small screens */
+  }
+}

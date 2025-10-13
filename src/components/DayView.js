@@ -1,0 +1,155 @@
+import React from 'react';
+import { format, addHours, isSameDay, isToday } from 'date-fns';
+import './DayView.css';
+
+const DayView = ({ 
+  events, 
+  selectedDate, 
+  onDateChange, 
+  onTimeSlotClick, 
+  onEventClick, 
+  accounts 
+}) => {
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  
+  const dayEvents = events.filter(event => {
+    const eventStart = new Date(event.start?.dateTime || event.start?.date);
+    return isSameDay(eventStart, selectedDate);
+  });
+
+  const getAllDayEvents = () => {
+    return dayEvents.filter(event => 
+      event.start?.date && !event.start?.dateTime
+    );
+  };
+
+  const getTimedEvents = () => {
+    return dayEvents.filter(event => 
+      event.start?.dateTime
+    );
+  };
+
+  const getEventsForHour = (hour) => {
+    return getTimedEvents().filter(event => {
+      const eventStart = new Date(event.start.dateTime);
+      const eventEnd = new Date(event.end.dateTime);
+      
+      return eventStart.getHours() <= hour && eventEnd.getHours() > hour;
+    });
+  };
+
+  const renderHeader = () => {
+    return (
+      <div className="day-header">
+        <div className="day-title">
+          <h2 className="day-name">{format(selectedDate, 'EEEE')}</h2>
+          <h3 className="day-date">{format(selectedDate, 'MMMM d, yyyy')}</h3>
+          {isToday(selectedDate) && <span className="today-badge">Today</span>}
+        </div>
+      </div>
+    );
+  };
+
+  const renderAllDayEvents = () => {
+    const allDayEvents = getAllDayEvents();
+    
+    if (allDayEvents.length === 0) return null;
+
+    return (
+      <div className="all-day-section">
+        <div className="all-day-label">All Day</div>
+        <div className="all-day-events">
+          {allDayEvents.map((event, index) => {
+            const accountIndex = accounts.findIndex(acc => acc.id === event.accountId);
+            return (
+              <div
+                key={index}
+                className={`all-day-event event-account-${(accountIndex % 6) + 1}`}
+                onClick={() => onEventClick(event)}
+                title={`${event.summary || event.title} - ${event.accountName || 'Unknown'}`}
+              >
+                <span className="all-day-event-title">
+                  {event.summary || event.title || 'Untitled Event'}
+                </span>
+                <span className="all-day-event-account">
+                  {event.accountName || event.accountEmail}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+    );
+  };
+
+  const renderTimeSlots = () => {
+    return hours.map(hour => {
+      const timeLabel = format(addHours(new Date().setHours(hour, 0, 0, 0), 0), 'HH:mm');
+      const hourEvents = getEventsForHour(hour);
+      
+      return (
+        <div key={hour} className="day-time-slot">
+          <div className="time-label">{timeLabel}</div>
+          <div 
+            className="time-content"
+            onClick={() => onTimeSlotClick(selectedDate, timeLabel)}
+          >
+            {hourEvents.map((event, index) => {
+              const accountIndex = accounts.findIndex(acc => acc.id === event.accountId);
+              const startTime = new Date(event.start.dateTime);
+              const endTime = new Date(event.end.dateTime);
+              const duration = (endTime - startTime) / (1000 * 60); // minutes
+              
+              return (
+                <div
+                  key={index}
+                  className={`day-event event-account-${(accountIndex % 6) + 1}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onEventClick(event);
+                  }}
+                  title={`${event.summary || event.title} - ${event.accountName || 'Unknown'}`}
+                  style={{
+                    height: Math.max(30, (duration / 60) * 60) + 'px' // Minimum 30px height
+                  }}
+                >
+                  <div className="day-event-time">
+                    {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
+                  </div>
+                  <div className="day-event-title">
+                    {event.summary || event.title || 'Untitled Event'}
+                  </div>
+                  <div className="day-event-details">
+                    {event.location && (
+                      <span className="event-location">📍 {event.location}</span>
+                    )}
+                    <span className="event-account">
+                      {event.accountName || event.accountEmail}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+            {hourEvents.length === 0 && (
+              <div className="empty-slot-hint">
+                Click to add event at {timeLabel}
+              </div>
+            )}
+          </div>
+        </div>
+      );
+    });
+  };
+
+  return (
+    <div className="day-view">
+      {renderHeader()}
+      {renderAllDayEvents()}
+      <div className="day-schedule">
+        {renderTimeSlots()}
+      </div>
+    </div>
+  );
+};
+
+export default DayView;
