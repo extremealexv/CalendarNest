@@ -68,14 +68,19 @@ sudo apt-get install -y \
 
 # Install Electron dependencies
 print_status "Installing Electron dependencies..."
-# Configure automatic selection for problematic packages
-echo 'libasound2 libasound2/pulse boolean true' | sudo debconf-set-selections
-echo 'libgtk-3-0t64 libgtk-3-0t64/restart-without-asking boolean true' | sudo debconf-set-selections
 
-# Use apt-get with force options to avoid interactive prompts
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+# Pre-configure packages to avoid prompts
+export DEBIAN_FRONTEND=noninteractive
+sudo -E apt-get -qq update
+
+# Install packages with automatic conflict resolution
+print_status "Installing system packages..."
+sudo -E apt-get install -y -qq \
+    --no-install-recommends \
+    --fix-missing \
     -o Dpkg::Options::="--force-confdef" \
     -o Dpkg::Options::="--force-confold" \
+    -o APT::Get::Assume-Yes=true \
     libnss3-dev \
     libatk-bridge2.0-dev \
     libdrm2 \
@@ -83,9 +88,23 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     libxdamage1 \
     libxrandr2 \
     libgbm1 \
-    libgtk-3-0t64 \
-    libxss1 \
-    libasound2t64
+    libxss1 || print_warning "Some packages may have failed, continuing..."
+
+# Handle audio packages separately with fallbacks
+print_status "Installing audio libraries..."
+if ! sudo -E apt-get install -y -qq libasound2-dev 2>/dev/null; then
+    if ! sudo -E apt-get install -y -qq libasound2t64 2>/dev/null; then
+        print_warning "Audio library installation failed, skipping..."
+    fi
+fi
+
+# Handle GTK packages
+print_status "Installing GTK libraries..."
+if ! sudo -E apt-get install -y -qq libgtk-3-dev 2>/dev/null; then
+    if ! sudo -E apt-get install -y -qq libgtk-3-0t64 2>/dev/null; then
+        sudo -E apt-get install -y -qq libgtk-3-0 || print_warning "GTK installation failed, skipping..."
+    fi
+fi
 
 # Install project dependencies
 print_status "Installing FamSync dependencies..."

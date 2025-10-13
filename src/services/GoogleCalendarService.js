@@ -1,45 +1,68 @@
-// Google Calendar API Integration for FamSync Kiosk
-import { google } from 'googleapis';
+// Google Calendar API Integration for FamSync Kiosk (Browser Compatible)
+import { gapi } from 'gapi-script';
 
 class GoogleCalendarService {
   constructor() {
-    this.oauth2Client = null;
-    this.calendar = null;
+    this.isGapiLoaded = false;
     this.accounts = new Map(); // Store multiple authenticated accounts
+    this.currentAuth = null;
   }
 
-  // Initialize OAuth2 client
-  initializeOAuth2() {
-    this.oauth2Client = new google.auth.OAuth2(
-      process.env.REACT_APP_GOOGLE_CLIENT_ID,
-      process.env.REACT_APP_GOOGLE_CLIENT_SECRET,
-      process.env.REACT_APP_GOOGLE_REDIRECT_URI || 'http://localhost:3000/auth/callback'
-    );
-    
-    this.calendar = google.calendar({ version: 'v3', auth: this.oauth2Client });
-  }
+  // Initialize Google API client for browser
+  async initializeGapi() {
+    if (this.isGapiLoaded) return true;
 
-  // Generate authentication URL for OAuth2 flow
-  getAuthUrl(accountHint = '') {
-    if (!this.oauth2Client) {
-      this.initializeOAuth2();
+    try {
+      await new Promise((resolve, reject) => {
+        gapi.load('auth2:client', {
+          callback: resolve,
+          onerror: reject
+        });
+      });
+
+      await gapi.client.init({
+        apiKey: process.env.REACT_APP_GOOGLE_API_KEY,
+        clientId: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
+        scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events'
+      });
+
+      this.currentAuth = gapi.auth2.getAuthInstance();
+      this.isGapiLoaded = true;
+      return true;
+    } catch (error) {
+      console.error('Failed to initialize Google API:', error);
+      return false;
     }
+  }
 
-    const scopes = [
-      'https://www.googleapis.com/auth/calendar',
-      'https://www.googleapis.com/auth/calendar.events',
-      'https://www.googleapis.com/auth/userinfo.profile',
-      'https://www.googleapis.com/auth/userinfo.email'
-    ];
+  // Start authentication flow
+  async startAuthentication() {
+    await this.initializeGapi();
+    
+    try {
+      const authResponse = await this.currentAuth.signIn();
+      const profile = authResponse.getBasicProfile();
+      const authResult = authResponse.getAuthResponse(true);
 
-    const authUrl = this.oauth2Client.generateAuthUrl({
-      access_type: 'offline',
-      scope: scopes,
-      prompt: 'consent',
-      login_hint: accountHint
-    });
+      const accountData = {
+        id: profile.getId(),
+        email: profile.getEmail(),
+        name: profile.getName(),
+        picture: profile.getImageUrl(),
+        accessToken: authResult.access_token,
+        idToken: authResult.id_token,
+        authenticatedAt: new Date().toISOString()
+      };
 
-    return authUrl;
+      this.accounts.set(accountData.id, accountData);
+      this.saveAccountToStorage(accountData);
+      
+      return accountData;
+    } catch (error) {
+      console.error('Authentication failed:', error);
+      throw new Error('Failed to authenticate with Google');
+    }
   }
 
   // Exchange authorization code for tokens
