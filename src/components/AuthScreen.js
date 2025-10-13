@@ -179,11 +179,13 @@ const AuthScreen = ({ onAuthenticate }) => {
     setAuthUrl('');
   };
 
-  const renderWelcomeScreen = () => (
-    <div className="auth-welcome">
+  const renderWelcomeScreen = () => {
+    console.log('Rendering welcome screen');
+    return (
+    <div className="auth-welcome" style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '40px', borderRadius: '10px' }}>
       <div className="welcome-header">
-        <h1>Welcome to FamSync</h1>
-        <p>Your family calendar kiosk</p>
+        <h1 style={{ color: 'white', fontSize: '3rem', textShadow: '2px 2px 4px rgba(0,0,0,0.8)' }}>Welcome to FamSync</h1>
+        <p style={{ color: 'white', fontSize: '1.5rem', textShadow: '1px 1px 2px rgba(0,0,0,0.8)' }}>Your family calendar kiosk</p>
       </div>
       
       <div className="auth-options">
@@ -191,6 +193,14 @@ const AuthScreen = ({ onAuthenticate }) => {
           className="btn btn-large btn-primary" 
           onClick={handleManualAuth}
           disabled={loading}
+          style={{ 
+            backgroundColor: '#4CAF50', 
+            color: 'white', 
+            fontSize: '1.3rem', 
+            padding: '20px 40px',
+            border: '2px solid white',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+          }}
         >
           <span className="btn-icon">🔐</span>
           Sign in with Google
@@ -200,6 +210,14 @@ const AuthScreen = ({ onAuthenticate }) => {
           className="btn btn-large btn-secondary" 
           onClick={generateQRAuth}
           disabled={loading}
+          style={{ 
+            backgroundColor: '#2196F3', 
+            color: 'white', 
+            fontSize: '1.3rem', 
+            padding: '20px 40px',
+            border: '2px solid white',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+          }}
         >
           <span className="btn-icon">📱</span>
           Generate QR Code
@@ -209,6 +227,14 @@ const AuthScreen = ({ onAuthenticate }) => {
           className="btn btn-large btn-secondary" 
           onClick={startQRScanning}
           disabled={loading}
+          style={{ 
+            backgroundColor: '#FF9800', 
+            color: 'white', 
+            fontSize: '1.3rem', 
+            padding: '20px 40px',
+            border: '2px solid white',
+            boxShadow: '0 4px 8px rgba(0,0,0,0.3)'
+          }}
         >
           <span className="btn-icon">📷</span>
           Scan QR Code
@@ -224,7 +250,8 @@ const AuthScreen = ({ onAuthenticate }) => {
         </div>
       )}
     </div>
-  );
+    );
+  };
 
   const renderQRScreen = () => (
     <div className="auth-qr">
