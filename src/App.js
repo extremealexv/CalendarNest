@@ -26,16 +26,21 @@ function App() {
 
   const initializeApp = async () => {
     try {
+      console.log('Initializing FamSync app...');
       // Check for existing authentication
       const existingAuth = await authService.checkExistingAuth();
+      console.log('Existing auth check complete:', existingAuth);
       if (existingAuth && existingAuth.length > 0) {
         setAccounts(existingAuth);
         setIsAuthenticated(true);
         await loadCalendarData(existingAuth);
+      } else {
+        console.log('No existing authentication found');
       }
     } catch (error) {
       console.error('Failed to initialize app:', error);
     } finally {
+      console.log('Setting loading to false');
       setLoading(false);
     }
   };
