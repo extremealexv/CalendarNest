@@ -319,6 +319,22 @@ const AuthScreen = ({ onAuthenticate }) => {
 
   return (
     <div className="auth-screen">
+      <div style={{
+        position: 'fixed',
+        top: 100,
+        left: 0,
+        width: '100vw',
+        zIndex: 99999,
+        background: 'yellow',
+        color: 'black',
+        fontSize: '3rem',
+        textAlign: 'center',
+        fontWeight: 'bold',
+        padding: '40px',
+        border: '5px solid red',
+      }}>
+        DEBUG: AuthScreen is rendering!
+      </div>
       {authMode === 'welcome' && renderWelcomeScreen()}
       {authMode === 'qr' && renderQRScreen()}
       {authMode === 'scanning' && renderScanningScreen()}
