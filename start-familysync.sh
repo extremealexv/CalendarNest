@@ -20,6 +20,3 @@ xset s noblank 2>/dev/null || true
 # Launch FamSync with all necessary flags
 exec /home/kiosk/FamSync.AppImage --no-sandbox --disable-gpu-sandbox --disable-software-rasterizer --disable-dev-shm-usage
 EOF
-
-sudo chmod +x /home/kiosk/start-famsync.sh
-sudo chown kiosk:kiosk /home/kiosk/start-famsync.sh
