@@ -40,6 +40,7 @@ fi
 
 print_status "Updating system packages..."
 sudo apt update
+sudo DEBIAN_FRONTEND=noninteractive apt upgrade -y -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold"
 
 # Install Node.js and npm
 print_status "Installing Node.js and npm..."
@@ -67,7 +68,14 @@ sudo apt-get install -y \
 
 # Install Electron dependencies
 print_status "Installing Electron dependencies..."
-sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
+# Configure automatic selection for problematic packages
+echo 'libasound2 libasound2/pulse boolean true' | sudo debconf-set-selections
+echo 'libgtk-3-0t64 libgtk-3-0t64/restart-without-asking boolean true' | sudo debconf-set-selections
+
+# Use apt-get with force options to avoid interactive prompts
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
+    -o Dpkg::Options::="--force-confdef" \
+    -o Dpkg::Options::="--force-confold" \
     libnss3-dev \
     libatk-bridge2.0-dev \
     libdrm2 \
@@ -77,7 +85,7 @@ sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libgbm1 \
     libgtk-3-0t64 \
     libxss1 \
-    libasound2
+    libasound2t64
 
 # Install project dependencies
 print_status "Installing FamSync dependencies..."
