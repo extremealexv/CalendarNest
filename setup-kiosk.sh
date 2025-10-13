@@ -67,7 +67,7 @@ sudo apt-get install -y \
 
 # Install Electron dependencies
 print_status "Installing Electron dependencies..."
-sudo apt-get install -y \
+sudo DEBIAN_FRONTEND=noninteractive apt-get install -y \
     libnss3-dev \
     libatk-bridge2.0-dev \
     libdrm2 \
@@ -75,7 +75,7 @@ sudo apt-get install -y \
     libxdamage1 \
     libxrandr2 \
     libgbm1 \
-    libgtk-3-0 \
+    libgtk-3-0t64 \
     libxss1 \
     libasound2
 
