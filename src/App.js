@@ -10,7 +10,7 @@ import LoadingScreen from './components/LoadingScreen';
 
 // Import services
 import { GoogleCalendarService } from './services/GoogleCalendarService';
-import { AuthService } from './services/AuthService';
+import { authService } from './services/AuthService';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
@@ -27,7 +27,7 @@ function App() {
   const initializeApp = async () => {
     try {
       // Check for existing authentication
-      const existingAuth = await AuthService.checkExistingAuth();
+      const existingAuth = await authService.checkExistingAuth();
       if (existingAuth && existingAuth.length > 0) {
         setAccounts(existingAuth);
         setIsAuthenticated(true);
@@ -67,7 +67,7 @@ function App() {
 
   const handleLogout = async (accountId) => {
     try {
-      await AuthService.logout(accountId);
+      await authService.logout(accountId);
       const updatedAccounts = accounts.filter(acc => acc.id !== accountId);
       setAccounts(updatedAccounts);
       
