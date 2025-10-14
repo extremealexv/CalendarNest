@@ -116,59 +116,16 @@ function App() {
     return <LoadingScreen />;
   }
 
+  // Force AuthScreen to always render for debugging
   return (
     <div className="app" style={{ backgroundColor: 'red', minHeight: '100vh' }}>
       <div style={{ position: 'absolute', top: '10px', left: '10px', color: 'white', backgroundColor: 'black', padding: '10px', zIndex: 9999 }}>
         Debug: Auth={isAuthenticated ? 'YES' : 'NO'}, Accounts={accounts.length}, Loading={loading ? 'YES' : 'NO'}
       </div>
-      <Router>
-        <Routes>
-          <Route 
-            path="/auth" 
-            element={
-              !isAuthenticated ? (
-                <>
-                  {console.log('Rendering AuthScreen')}
-                  <AuthScreen onAuthenticate={handleAuthentication} />
-                </>
-              ) : (
-                <Navigate to="/" replace />
-              )
-            } 
-          />
-          <Route 
-            path="/" 
-            element={
-              isAuthenticated ? (
-                <>
-                  {console.log('Rendering Calendar View')}
-                  <Header 
-                    accounts={accounts}
-                    currentView={currentView}
-                    onViewChange={handleViewChange}
-                    onLogout={handleLogout}
-                    selectedDate={selectedDate}
-                    onDateChange={handleDateChange}
-                  />
-                  <CalendarView
-                    view={currentView}
-                    events={events}
-                    selectedDate={selectedDate}
-                    onDateChange={handleDateChange}
-                    onEventCreate={handleEventCreate}
-                    accounts={accounts}
-                  />
-                </>
-              ) : (
-                <>
-                  {console.log('Redirecting to /auth')}
-                  <Navigate to="/auth" replace />
-                </>
-              )
-            }
-          />
-        </Routes>
-      </Router>
+      <div style={{ position: 'fixed', top: 100, left: 0, width: '100vw', zIndex: 99999, background: 'yellow', color: 'black', fontSize: '3rem', textAlign: 'center', fontWeight: 'bold', padding: '40px', border: '5px solid red' }}>
+        DEBUG: AuthScreen forced render!
+      </div>
+      <AuthScreen onAuthenticate={handleAuthentication} />
     </div>
   );
 }
