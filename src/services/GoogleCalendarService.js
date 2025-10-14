@@ -37,6 +37,10 @@ class GoogleCalendarService {
       console.log('Google API client initialized successfully.');
 
       this.currentAuth = gapi.auth2.getAuthInstance();
+      if (!this.currentAuth) {
+        throw new Error('gapi.auth2.getAuthInstance returned null or undefined');
+      }
+
       this.isGapiLoaded = true;
       return true;
     } catch (error) {
