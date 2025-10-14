@@ -27,6 +27,10 @@ class GoogleCalendarService {
 
       console.log('gapi loaded successfully. Initializing client...');
 
+      if (!gapi.auth2) {
+        throw new Error('auth2 module is missing in gapi. Ensure the Google API client is configured correctly.');
+      }
+
       await gapi.client.init({
         apiKey: process.env.REACT_APP_GOOGLE_API_KEY,
         clientId: process.env.REACT_APP_GOOGLE_CLIENT_ID,
