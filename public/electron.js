@@ -42,10 +42,22 @@ function createWindow() {
   // Prevent navigation away from the app
   mainWindow.webContents.on('will-navigate', (event, navigationUrl) => {
     const parsedUrl = new URL(navigationUrl);
-    
+    console.log('Navigating to URL:', navigationUrl);
+
     if (parsedUrl.origin !== startUrl && !parsedUrl.origin.includes('accounts.google.com')) {
+      console.error('Blocked navigation to:', navigationUrl);
       event.preventDefault();
     }
+  });
+
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
+    console.error('Failed to load URL:', validatedURL, 'Error:', errorDescription);
+  });
+
+  // Temporarily enable web security for testing
+  mainWindow.webContents.session.webRequest.onBeforeRequest((details, callback) => {
+    console.log('Request details:', details);
+    callback({ cancel: false });
   });
 
   // Handle external links
