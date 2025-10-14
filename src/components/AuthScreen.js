@@ -318,21 +318,8 @@ const AuthScreen = ({ onAuthenticate }) => {
   );
 
   return (
-    <div className="auth-screen">
-      <div style={{
-        position: 'fixed',
-        top: 100,
-        left: 0,
-        width: '100vw',
-        zIndex: 99999,
-        background: 'yellow',
-        color: 'black',
-        fontSize: '3rem',
-        textAlign: 'center',
-        fontWeight: 'bold',
-        padding: '40px',
-        border: '5px solid red',
-      }}>
+    <div className="auth-screen" style={{ backgroundColor: 'black', color: 'white', fontSize: '2rem', padding: '20px' }}>
+      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', background: 'yellow', color: 'black', fontSize: '3rem', textAlign: 'center', fontWeight: 'bold', padding: '20px', border: '5px solid red' }}>
         DEBUG: AuthScreen is rendering!
       </div>
       {authMode === 'welcome' && renderWelcomeScreen()}
