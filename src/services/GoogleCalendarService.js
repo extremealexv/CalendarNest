@@ -13,12 +13,19 @@ class GoogleCalendarService {
     if (this.isGapiLoaded) return true;
 
     try {
+      console.log('Starting Google API initialization...');
+
       await new Promise((resolve, reject) => {
         gapi.load('auth2:client', {
           callback: resolve,
-          onerror: reject
+          onerror: (error) => {
+            console.error('Failed to load gapi:', error);
+            reject(error);
+          }
         });
       });
+
+      console.log('gapi loaded successfully. Initializing client...');
 
       await gapi.client.init({
         apiKey: process.env.REACT_APP_GOOGLE_API_KEY,
@@ -26,6 +33,8 @@ class GoogleCalendarService {
         discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/calendar/v3/rest'],
         scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events'
       });
+
+      console.log('Google API client initialized successfully.');
 
       this.currentAuth = gapi.auth2.getAuthInstance();
       this.isGapiLoaded = true;
