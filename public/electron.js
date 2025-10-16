@@ -7,6 +7,8 @@ const os = require('os');
 // Load environment variables from the appropriate location
 function loadEnvFile() {
   const envPaths = [
+    // Explicit local project .env for the Orange Pi deployment
+    '/home/orangepi/CalendarNest/.env',
     path.join(os.homedir(), '.config', 'famsync', '.env'),  // User config directory (preferred)
     path.join('/opt/famsync', '.env'),                      // Installation directory
     path.join(process.cwd(), '.env'),                       // Current working directory
