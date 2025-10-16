@@ -2,6 +2,13 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
 
+// Disable GPU acceleration for ARM devices
+app.disableHardwareAcceleration();
+app.commandLine.appendSwitch('disable-gpu');
+app.commandLine.appendSwitch('disable-software-rasterizer');
+app.commandLine.appendSwitch('disable-gpu-compositing');
+app.commandLine.appendSwitch('no-sandbox');
+
 let mainWindow;
 
 function createWindow() {
@@ -13,7 +20,8 @@ function createWindow() {
       nodeIntegration: true,
       contextIsolation: false,
       enableRemoteModule: true,
-      webSecurity: false // Allow local file access for development
+      webSecurity: false, // Allow local file access for development
+      offscreen: false // Ensure standard rendering mode
     },
     // Kiosk mode settings
     fullscreen: !isDev, // Only fullscreen in production
