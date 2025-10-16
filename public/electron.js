@@ -16,20 +16,52 @@ function loadEnvFile() {
   for (const envPath of envPaths) {
     try {
       if (fs.existsSync(envPath)) {
-        require('dotenv').config({ path: envPath });
-        console.log('Loaded environment from:', envPath);
-        return true;
+        // Try using dotenv if available. If it's not bundled in the AppImage,
+        // fall back to a simple parser so the app can still load environment vars.
+        try {
+          require('dotenv').config({ path: envPath });
+          console.log('Loaded environment from (dotenv):', envPath);
+          return envPath;
+        } catch (dotErr) {
+          try {
+            const raw = fs.readFileSync(envPath, 'utf8');
+            raw.split(/\r?\n/).forEach(line => {
+              const trimmed = line.trim();
+              if (!trimmed || trimmed.startsWith('#')) return;
+              const eq = trimmed.indexOf('=');
+              if (eq === -1) return;
+              const key = trimmed.slice(0, eq).trim();
+              let val = trimmed.slice(eq + 1).trim();
+              // Remove surrounding quotes
+              if ((val.startsWith('"') && val.endsWith('"')) || (val.startsWith("'") && val.endsWith("'"))) {
+                val = val.slice(1, -1);
+              }
+              if (key && process.env[key] === undefined) process.env[key] = val;
+            });
+            console.log('Loaded environment from (manual):', envPath);
+            return envPath;
+          } catch (readErr) {
+            console.error('Error reading .env from', envPath, ':', readErr);
+          }
+        }
       }
     } catch (error) {
       console.error('Error loading .env from', envPath, ':', error);
     }
   }
   console.warn('No .env file found in any of the search paths');
-  return false;
+  return null;
 }
 
 // Load environment variables before app initialization
-loadEnvFile();
+const _envLoadedFrom = loadEnvFile();
+if (_envLoadedFrom) {
+  console.log('Environment loaded from:', _envLoadedFrom);
+} else {
+  console.log('Environment not loaded from file');
+}
+
+console.log('Tokens file path:', TOKENS_PATH);
 
 // Configure app for ARM devices
 app.disableHardwareAcceleration();
