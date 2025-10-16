@@ -153,7 +153,7 @@ const AuthScreen = ({ onAuthenticate }) => {
   const handleAccountSwitch = async (accountId) => {
     try {
       // Switch to existing account (implementation depends on how accounts are stored)
-      console.log('Switching to account:', accountId);
+      // switching to account
     } catch (error) {
       console.error('Account switch failed:', error);
     }
@@ -180,7 +180,6 @@ const AuthScreen = ({ onAuthenticate }) => {
   };
 
   const renderWelcomeScreen = () => {
-    console.log('Rendering welcome screen');
     return (
     <div className="auth-welcome" style={{ backgroundColor: 'rgba(0,0,0,0.3)', padding: '40px', borderRadius: '10px' }}>
       <div className="welcome-header">
@@ -319,9 +318,7 @@ const AuthScreen = ({ onAuthenticate }) => {
 
   return (
     <div className="auth-screen" style={{ backgroundColor: 'black', color: 'white', fontSize: '2rem', padding: '20px', overflow: 'hidden', maxWidth: '100vw', maxHeight: '100vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-      <div style={{ position: 'fixed', top: 0, left: 0, width: '100%', background: 'yellow', color: 'black', fontSize: '3rem', textAlign: 'center', fontWeight: 'bold', padding: '20px', border: '5px solid red' }}>
-        DEBUG: AuthScreen is rendering!
-      </div>
+      {/* debug banner removed */}
       {authMode === 'welcome' && renderWelcomeScreen()}
       {authMode === 'qr' && renderQRScreen()}
       {authMode === 'scanning' && renderScanningScreen()}

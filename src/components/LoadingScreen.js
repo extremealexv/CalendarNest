@@ -2,7 +2,6 @@ import React from 'react';
 import './LoadingScreen.css';
 
 const LoadingScreen = ({ message = 'Loading FamSync...' }) => {
-  console.log('LoadingScreen rendered with message:', message);
   return (
     <div className="loading-screen">
       <div className="loading-content">

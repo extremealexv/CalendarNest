@@ -26,21 +26,21 @@ function App() {
 
   const initializeApp = async () => {
     try {
-      console.log('Initializing FamSync app...');
+      // Initializing FamSync app
       // Check for existing authentication
       const existingAuth = await authService.checkExistingAuth();
-      console.log('Existing auth check complete:', existingAuth);
+  // existing auth check complete
       if (existingAuth && existingAuth.length > 0) {
         setAccounts(existingAuth);
         setIsAuthenticated(true);
         await loadCalendarData(existingAuth);
       } else {
-        console.log('No existing authentication found');
+  // no existing authentication
       }
     } catch (error) {
       console.error('Failed to initialize app:', error);
     } finally {
-      console.log('Setting loading to false');
+  // finished initialization
       setLoading(false);
     }
   };
@@ -109,22 +109,15 @@ function App() {
     }
   };
 
-  console.log('App render - loading:', loading, 'isAuthenticated:', isAuthenticated, 'accounts:', accounts.length);
+  // App render
 
   if (loading) {
     console.log('Rendering LoadingScreen');
     return <LoadingScreen />;
   }
 
-  // Force AuthScreen to always render for debugging
   return (
-    <div className="app" style={{ backgroundColor: 'red', minHeight: '100vh' }}>
-      <div style={{ position: 'absolute', top: '10px', left: '10px', color: 'white', backgroundColor: 'black', padding: '10px', zIndex: 9999 }}>
-        Debug: Auth={isAuthenticated ? 'YES' : 'NO'}, Accounts={accounts.length}, Loading={loading ? 'YES' : 'NO'}
-      </div>
-      <div style={{ position: 'fixed', top: 100, left: 0, width: '100vw', zIndex: 99999, background: 'yellow', color: 'black', fontSize: '3rem', textAlign: 'center', fontWeight: 'bold', padding: '40px', border: '5px solid red' }}>
-        DEBUG: AuthScreen forced render!
-      </div>
+    <div className="app" style={{ minHeight: '100vh' }}>
       <AuthScreen onAuthenticate={handleAuthentication} />
     </div>
   );
