@@ -6,126 +6,103 @@ class AuthService {
     this.isInitialized = false;
   }
 
-  // Initialize the auth service
   async initialize() {
     if (this.isInitialized) return;
-
     try {
-      // Load existing accounts from storage
-      googleCalendarService.loadStoredAccounts();
+      await googleCalendarService.loadStoredAccounts();
       this.isInitialized = true;
-    } catch (error) {
-      console.error('Failed to initialize auth service:', error);
+    } catch (err) {
+      console.error('Failed to initialize auth service', err);
     }
   }
 
-  // Check for existing authentication
   async checkExistingAuth() {
     await this.initialize();
     return googleCalendarService.getAccounts();
   }
 
-  // Start OAuth2 authentication flow
+  // Start PKCE-based auth flow, open auth window via preload API
   async startAuthentication(accountHint = '') {
     await this.initialize();
-    
     try {
-      const authUrl = googleCalendarService.getAuthUrl(accountHint);
-      
-      // In Electron, open the auth URL in a new window
-      if (window.electronAPI) {
-        return await window.electronAPI.openAuthWindow(authUrl);
-      } else {
-        // For web development, open in popup
-        const popup = window.open(
-          authUrl,
-          'google-auth',
-          'width=600,height=700,scrollbars=yes,resizable=yes'
-        );
-        
-        return new Promise((resolve, reject) => {
-          const checkClosed = setInterval(() => {
-            if (popup.closed) {
-              clearInterval(checkClosed);
-              reject(new Error('Authentication was cancelled'));
-            }
-          }, 1000);
+      const authUrl = await googleCalendarService.getAuthUrl(accountHint);
 
-          // Listen for the auth code from the popup
-          window.addEventListener('message', (event) => {
+      if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
+        const result = await window.electronAPI.openAuthWindow(authUrl);
+        if (result && result.code) {
+          const account = await googleCalendarService.authenticateWithCode(result.code);
+          return account;
+        }
+        throw new Error('Authentication failed or cancelled');
+      } else {
+        // Web fallback using popup
+        const popup = window.open(authUrl, 'google-auth', 'width=600,height=700');
+        return new Promise((resolve, reject) => {
+          const interval = setInterval(() => {
+            try {
+              if (popup.closed) {
+                clearInterval(interval);
+                reject(new Error('Authentication cancelled'));
+              }
+            } catch (e) {}
+          }, 500);
+
+          window.addEventListener('message', async function onMessage(event) {
             if (event.origin !== window.location.origin) return;
-            
-            if (event.data.type === 'GOOGLE_AUTH_SUCCESS') {
-              clearInterval(checkClosed);
+            if (event.data && event.data.type === 'GOOGLE_AUTH_SUCCESS') {
+              window.removeEventListener('message', onMessage);
+              clearInterval(interval);
               popup.close();
-              resolve(event.data.code);
-            } else if (event.data.type === 'GOOGLE_AUTH_ERROR') {
-              clearInterval(checkClosed);
-              popup.close();
-              reject(new Error(event.data.error));
+              try {
+                const account = await googleCalendarService.authenticateWithCode(event.data.code);
+                resolve(account);
+              } catch (err) {
+                reject(err);
+              }
             }
           });
         });
       }
-    } catch (error) {
-      console.error('Authentication failed:', error);
-      throw new Error('Failed to start authentication');
+    } catch (err) {
+      console.error('startAuthentication error', err);
+      throw err;
     }
   }
 
-  // Complete authentication with authorization code
-  async completeAuthentication(authorizationCode) {
-    try {
-      const accountData = await googleCalendarService.authenticateWithCode(authorizationCode);
-      return accountData;
-    } catch (error) {
-      console.error('Failed to complete authentication:', error);
-      throw new Error('Authentication failed');
-    }
-  }
-
-  // Logout specific account
   async logout(accountId) {
     try {
       googleCalendarService.removeAccount(accountId);
       return true;
-    } catch (error) {
-      console.error('Logout failed:', error);
-      throw new Error('Failed to logout');
+    } catch (err) {
+      console.error('Logout failed', err);
+      throw err;
     }
   }
 
-  // Logout all accounts
   async logoutAll() {
     try {
       const accounts = googleCalendarService.getAccounts();
-      for (const account of accounts) {
-        await this.logout(account.id);
-      }
+      for (const acc of accounts) await this.logout(acc.id);
       return true;
-    } catch (error) {
-      console.error('Failed to logout all accounts:', error);
-      throw new Error('Failed to logout all accounts');
+    } catch (err) {
+      console.error('logoutAll failed', err);
+      throw err;
     }
   }
 
-  // Get current authenticated accounts
   getAuthenticatedAccounts() {
     return googleCalendarService.getAccounts();
   }
 
-  // Check if user is authenticated
   isAuthenticated() {
-    const accounts = this.getAuthenticatedAccounts();
-    return accounts.length > 0;
+    return this.getAuthenticatedAccounts().length > 0;
   }
 
-  // Refresh authentication tokens
   async refreshTokens(accountId) {
     try {
       return await googleCalendarService.refreshTokenIfNeeded(accountId);
-    } catch (error) {
-      console.error('Token refresh failed:', error);
+    } catch (err) {
+      console.error('refreshTokens failed', err);
       return false;
     }
   }

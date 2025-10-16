@@ -56,9 +56,10 @@ function createWindow() {
     width: 1920,
     height: 1080,
     webPreferences: {
-      nodeIntegration: true,
-      contextIsolation: false,
-      enableRemoteModule: true,
+      nodeIntegration: false,
+      contextIsolation: true,
+      preload: path.join(__dirname, 'preload.js'),
+      enableRemoteModule: false,
       webSecurity: false, // Allow local file access for development
       offscreen: false // Ensure standard rendering mode
     },
@@ -178,3 +179,134 @@ if (process.platform === 'linux' && !isDev) {
     path: process.execPath
   });
 }
+
+// Token storage helpers (simple JSON file in userData)
+const TOKENS_PATH = path.join(app.getPath('userData'), 'famsync_tokens.json');
+
+function readTokensFile() {
+  try {
+    if (fs.existsSync(TOKENS_PATH)) {
+      const raw = fs.readFileSync(TOKENS_PATH, 'utf8');
+      return JSON.parse(raw || '{}');
+    }
+  } catch (err) {
+    console.error('Failed to read tokens file:', err);
+  }
+  return {};
+}
+
+function writeTokensFile(data) {
+  try {
+    fs.writeFileSync(TOKENS_PATH, JSON.stringify(data, null, 2), 'utf8');
+    return true;
+  } catch (err) {
+    console.error('Failed to write tokens file:', err);
+    return false;
+  }
+}
+
+// IPC: Open auth window and capture redirect (PKCE-friendly)
+ipcMain.handle('open-auth-window', async (event, authUrl) => {
+  return new Promise((resolve, reject) => {
+    try {
+      const authWindow = new BrowserWindow({
+        width: 600,
+        height: 700,
+        modal: true,
+        parent: mainWindow,
+        webPreferences: {
+          nodeIntegration: false,
+          contextIsolation: true
+        }
+      });
+
+      authWindow.loadURL(authUrl);
+
+      const handleNavigation = (newUrl) => {
+        try {
+          const parsed = new URL(newUrl);
+          // If the redirect URI matches our app's configured redirect, capture code
+          const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI || '';
+          if (redirectUri && newUrl.startsWith(redirectUri)) {
+            const code = parsed.searchParams.get('code');
+            const error = parsed.searchParams.get('error');
+            if (code) {
+              resolve({ code });
+            } else {
+              reject(new Error(error || 'No code in redirect'));
+            }
+            authWindow.close();
+          }
+        } catch (err) {
+          // ignore parse errors for other navigations
+        }
+      };
+
+      authWindow.webContents.on('will-redirect', (event, url) => {
+        handleNavigation(url);
+      });
+
+      authWindow.webContents.on('did-navigate', (event, url) => {
+        handleNavigation(url);
+      });
+
+      authWindow.on('closed', () => {
+        reject(new Error('Auth window closed'));
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+});
+
+// IPC: token storage
+ipcMain.handle('save-tokens', async (event, { accountId, tokens }) => {
+  const all = readTokensFile();
+  all[accountId] = tokens;
+  return writeTokensFile(all);
+});
+
+ipcMain.handle('get-tokens', async (event, { accountId }) => {
+  const all = readTokensFile();
+  return all[accountId] || null;
+});
+
+ipcMain.handle('remove-tokens', async (event, { accountId }) => {
+  const all = readTokensFile();
+  delete all[accountId];
+  return writeTokensFile(all);
+});
+
+ipcMain.handle('list-accounts', async () => {
+  const all = readTokensFile();
+  return Object.keys(all);
+});
+
+// Exchange auth code for tokens in main process (avoids CORS)
+ipcMain.handle('exchange-auth-code', async (event, { code, codeVerifier }) => {
+  try {
+    const tokenUrl = 'https://oauth2.googleapis.com/token';
+    const params = new URLSearchParams();
+    params.append('client_id', process.env.REACT_APP_GOOGLE_CLIENT_ID || '');
+    params.append('code', code);
+    params.append('code_verifier', codeVerifier || '');
+    params.append('grant_type', 'authorization_code');
+    params.append('redirect_uri', process.env.REACT_APP_GOOGLE_REDIRECT_URI || '');
+
+    const resp = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
+    const json = await resp.json();
+    if (!resp.ok) {
+      throw new Error(JSON.stringify(json));
+    }
+
+    return { success: true, tokens: json };
+  } catch (err) {
+    console.error('exchange-auth-code failed', err);
+    return { success: false, error: String(err) };
+  }
+});
