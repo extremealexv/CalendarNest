@@ -2,12 +2,22 @@ const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
 
-// Disable GPU acceleration for ARM devices
+// Configure app for ARM devices
 app.disableHardwareAcceleration();
 app.commandLine.appendSwitch('disable-gpu');
 app.commandLine.appendSwitch('disable-software-rasterizer');
 app.commandLine.appendSwitch('disable-gpu-compositing');
 app.commandLine.appendSwitch('no-sandbox');
+app.commandLine.appendSwitch('enable-logging');
+app.commandLine.appendSwitch('v', '1');
+
+// Handle D-Bus environment
+if (process.env.DBUS_SESSION_BUS_ADDRESS) {
+    app.commandLine.appendSwitch('force-device-scale-factor', '1');
+    console.log('D-Bus session found:', process.env.DBUS_SESSION_BUS_ADDRESS);
+} else {
+    console.log('No D-Bus session found');
+}
 
 let mainWindow;
 
