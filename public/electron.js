@@ -63,7 +63,7 @@ if (_envLoadedFrom) {
   console.log('Environment not loaded from file');
 }
 
-console.log('Tokens file path:', TOKENS_PATH);
+// TOKENS_PATH is declared later after app paths are available; avoid referencing it before initialization
 
 // Configure app for ARM devices
 app.disableHardwareAcceleration();
