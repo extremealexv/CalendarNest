@@ -4,6 +4,10 @@ module.exports = function override(config, env) {
   // Add fallbacks for node core modules
   config.resolve.fallback = {
     ...config.resolve.fallback,
+    "fs": false,  // Mock fs module
+    "child_process": false, // Mock child_process
+    "net": false, // Mock net module
+    "tls": false, // Mock tls module
     "util": require.resolve("util/"),
     "url": require.resolve("url/"),
     "assert": require.resolve("assert/"),

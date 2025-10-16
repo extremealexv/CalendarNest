@@ -1,27 +1,19 @@
 // Google Calendar API Integration for FamSync Kiosk (Browser Compatible)
 import { gapi } from 'gapi-script';
-import { google } from 'googleapis';
 
 class GoogleCalendarService {
   constructor() {
     this.isGapiLoaded = false;
     this.accounts = new Map(); // Store multiple authenticated accounts
     this.currentAuth = null;
-    this.oauth2Client = null;
-  }
-
-  // Initialize OAuth2 client
-  initializeOAuth2() {
-    this.oauth2Client = new google.auth.OAuth2(
-      process.env.REACT_APP_GOOGLE_CLIENT_ID,
-      process.env.REACT_APP_GOOGLE_CLIENT_SECRET,
-      process.env.REACT_APP_GOOGLE_REDIRECT_URI
-    );
+    
+    // Initialize Google API client
+    this.initializeGapi().catch(console.error);
   }
 
   // Get OAuth2 authorization URL
   getAuthUrl(accountHint = '') {
-    if (!this.currentAuth || !this.isGapiLoaded) {
+    if (!this.isGapiLoaded) {
       throw new Error('Google API not initialized');
     }
     
@@ -160,16 +152,11 @@ class GoogleCalendarService {
 
   // Load stored accounts from localStorage
   loadStoredAccounts() {
-    try {
-      const storedAccounts = JSON.parse(localStorage.getItem('famsync_accounts') || '[]');
-      storedAccounts.forEach(account => {
-        this.accounts.set(account.id, account);
-      });
-      return storedAccounts;
-    } catch (error) {
-      console.error('Failed to load stored accounts:', error);
-      return [];
-    }
+    const storedAccounts = storageUtils.getAccounts();
+    storedAccounts.forEach(account => {
+      this.accounts.set(account.id, account);
+    });
+    return storedAccounts;
   }
 
   // Set up OAuth2 client for specific account
