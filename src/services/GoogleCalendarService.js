@@ -1,11 +1,46 @@
 // Google Calendar API Integration for FamSync Kiosk (Browser Compatible)
 import { gapi } from 'gapi-script';
+import { google } from 'googleapis';
 
 class GoogleCalendarService {
   constructor() {
     this.isGapiLoaded = false;
     this.accounts = new Map(); // Store multiple authenticated accounts
     this.currentAuth = null;
+    this.oauth2Client = null;
+  }
+
+  // Initialize OAuth2 client
+  initializeOAuth2() {
+    this.oauth2Client = new google.auth.OAuth2(
+      process.env.REACT_APP_GOOGLE_CLIENT_ID,
+      process.env.REACT_APP_GOOGLE_CLIENT_SECRET,
+      process.env.REACT_APP_GOOGLE_REDIRECT_URI
+    );
+  }
+
+  // Get OAuth2 authorization URL
+  getAuthUrl(accountHint = '') {
+    if (!this.currentAuth || !this.isGapiLoaded) {
+      throw new Error('Google API not initialized');
+    }
+    
+    const authUrl = new URL('https://accounts.google.com/o/oauth2/v2/auth');
+    const params = {
+      client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+      redirect_uri: process.env.REACT_APP_GOOGLE_REDIRECT_URI,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events profile email',
+      access_type: 'offline',
+      prompt: 'consent',
+      login_hint: accountHint
+    };
+
+    Object.entries(params).forEach(([key, value]) => {
+      authUrl.searchParams.append(key, value);
+    });
+
+    return authUrl.toString();
   }
 
   // Initialize Google API client for browser

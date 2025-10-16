@@ -1,6 +1,35 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const isDev = require('electron-is-dev');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+
+// Load environment variables from the appropriate location
+function loadEnvFile() {
+  const envPaths = [
+    path.join(os.homedir(), '.config', 'famsync', '.env'),  // User config directory (preferred)
+    path.join('/opt/famsync', '.env'),                      // Installation directory
+    path.join(process.cwd(), '.env'),                       // Current working directory
+    path.join(app.getPath('userData'), '.env')              // Electron user data directory
+  ];
+
+  for (const envPath of envPaths) {
+    try {
+      if (fs.existsSync(envPath)) {
+        require('dotenv').config({ path: envPath });
+        console.log('Loaded environment from:', envPath);
+        return true;
+      }
+    } catch (error) {
+      console.error('Error loading .env from', envPath, ':', error);
+    }
+  }
+  console.warn('No .env file found in any of the search paths');
+  return false;
+}
+
+// Load environment variables before app initialization
+loadEnvFile();
 
 // Configure app for ARM devices
 app.disableHardwareAcceleration();
