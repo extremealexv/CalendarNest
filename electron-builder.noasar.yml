@@ -1,0 +1,3 @@
+asar: false
+linux:
+  target: AppImage
