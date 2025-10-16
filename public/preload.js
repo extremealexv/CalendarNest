@@ -7,4 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeTokens: (accountId) => ipcRenderer.invoke('remove-tokens', { accountId }),
   listAccounts: () => ipcRenderer.invoke('list-accounts'),
   exchangeCode: (payload) => ipcRenderer.invoke('exchange-auth-code', payload)
+  ,
+  // Loopback helpers
+  createLoopbackServer: () => ipcRenderer.invoke('create-loopback-server'),
+  waitForAuthCode: (serverId) => ipcRenderer.invoke('wait-auth-code', { serverId })
 });

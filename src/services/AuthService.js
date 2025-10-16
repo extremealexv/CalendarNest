@@ -25,44 +25,24 @@ class AuthService {
   async startAuthentication(accountHint = '') {
     await this.initialize();
     try {
-      const authUrl = await googleCalendarService.getAuthUrl(accountHint);
+      // Use loopback server flow: create server, open auth URL, wait for code
+      const { authUrl, serverId } = await googleCalendarService.createAuthWithLoopback(accountHint);
 
+      // Open the auth URL in a window (for Electron we prefer main open)
       if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
-        const result = await window.electronAPI.openAuthWindow(authUrl);
-        if (result && result.code) {
-          const account = await googleCalendarService.authenticateWithCode(result.code);
-          return account;
-        }
-        throw new Error('Authentication failed or cancelled');
+        // open a window pointing to the auth page
+        await window.electronAPI.openAuthWindow(authUrl);
       } else {
-        // Web fallback using popup
-        const popup = window.open(authUrl, 'google-auth', 'width=600,height=700');
-        return new Promise((resolve, reject) => {
-          const interval = setInterval(() => {
-            try {
-              if (popup.closed) {
-                clearInterval(interval);
-                reject(new Error('Authentication cancelled'));
-              }
-            } catch (e) {}
-          }, 500);
-
-          window.addEventListener('message', async function onMessage(event) {
-            if (event.origin !== window.location.origin) return;
-            if (event.data && event.data.type === 'GOOGLE_AUTH_SUCCESS') {
-              window.removeEventListener('message', onMessage);
-              clearInterval(interval);
-              popup.close();
-              try {
-                const account = await googleCalendarService.authenticateWithCode(event.data.code);
-                resolve(account);
-              } catch (err) {
-                reject(err);
-              }
-            }
-          });
-        });
+        window.open(authUrl, 'google-auth', 'width=600,height=700');
       }
+
+      // Wait for the loopback server to receive the auth code
+      const result = await window.electronAPI.waitForAuthCode(serverId);
+      if (!result || !result.code) throw new Error('Authentication failed or timed out');
+
+      // Complete auth exchange
+      const account = await googleCalendarService.authenticateWithCode(result.code);
+      return account;
     } catch (err) {
       console.error('startAuthentication error', err);
       throw err;

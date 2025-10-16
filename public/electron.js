@@ -342,3 +342,65 @@ ipcMain.handle('exchange-auth-code', async (event, { code, codeVerifier }) => {
     return { success: false, error: String(err) };
   }
 });
+
+// Loopback server manager
+const http = require('http');
+const loopbackServers = new Map(); // serverId -> { server, port, resolver }
+let nextLoopbackId = 1;
+
+ipcMain.handle('create-loopback-server', async () => {
+  const id = String(nextLoopbackId++);
+  return new Promise((resolve, reject) => {
+    try {
+      const server = http.createServer((req, res) => {
+        try {
+          const urlObj = new URL(req.url, `http://127.0.0.1`);
+          const code = urlObj.searchParams.get('code');
+          const state = urlObj.searchParams.get('state');
+          // respond with a small HTML page that tells the user they can close
+          res.writeHead(200, { 'Content-Type': 'text/html' });
+          res.end('<html><body><h2>You can close this window and return to the app.</h2></body></html>');
+
+          const entry = loopbackServers.get(id);
+          if (entry && entry.resolve) entry.resolve({ code, state });
+        } catch (err) {
+          console.error('Loopback request handling error', err);
+        }
+      });
+
+      server.listen(0, '127.0.0.1', () => {
+        const port = server.address().port;
+        loopbackServers.set(id, { server, port, resolve: null });
+        resolve({ serverId: id, port, redirectUri: `http://127.0.0.1:${port}/callback` });
+      });
+    } catch (err) {
+      reject(err);
+    }
+  });
+});
+
+ipcMain.handle('wait-auth-code', async (event, { serverId }) => {
+  const entry = loopbackServers.get(String(serverId));
+  if (!entry) throw new Error('No such loopback server');
+
+  return new Promise((resolve, reject) => {
+    entry.resolve = (payload) => {
+      try {
+        resolve(payload);
+      } finally {
+        try { entry.server.close(); } catch (e) {}
+        loopbackServers.delete(String(serverId));
+      }
+    };
+
+    // Timeout after 2 minutes
+    setTimeout(() => {
+      if (entry.resolve) {
+        entry.resolve = null;
+        try { entry.server.close(); } catch (e) {}
+        loopbackServers.delete(String(serverId));
+        reject(new Error('Auth wait timed out'));
+      }
+    }, 2 * 60 * 1000);
+  });
+});

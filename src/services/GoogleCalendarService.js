@@ -36,12 +36,12 @@ class GoogleCalendarService {
 
   // Build auth URL for PKCE
   async getAuthUrl(accountHint = '') {
+    // Deprecated: use createAuthWithLoopback for loopback flow
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI;
     if (!clientId || !redirectUri) throw new Error('Missing Google client configuration');
 
     const { codeVerifier, codeChallenge } = await this.generatePKCECodes();
-    // Persist codeVerifier in sessionStorage for later exchange
     sessionStorage.setItem('famsync_pkce_verifier', codeVerifier);
 
     const params = new URLSearchParams({
@@ -57,6 +57,31 @@ class GoogleCalendarService {
     });
 
     return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+  }
+
+  // Create a loopback server and return auth URL + serverId
+  async createAuthWithLoopback(accountHint = '') {
+    const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
+    if (!clientId) throw new Error('Missing Google client ID');
+
+    const { serverId, redirectUri } = await window.electronAPI.createLoopbackServer();
+    const { codeVerifier, codeChallenge } = await this.generatePKCECodes();
+    sessionStorage.setItem('famsync_pkce_verifier', codeVerifier);
+
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirectUri,
+      response_type: 'code',
+      scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events profile email',
+      access_type: 'offline',
+      prompt: 'consent',
+      code_challenge: codeChallenge,
+      code_challenge_method: 'S256',
+      login_hint: accountHint
+    });
+
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+    return { authUrl, serverId, codeVerifier, redirectUri };
   }
 
   // Exchange code for tokens using PKCE
