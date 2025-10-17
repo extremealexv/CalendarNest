@@ -110,11 +110,41 @@ function createWindow() {
   });
 
   // Load the app
-  const startUrl = isDev 
-    ? 'http://localhost:3000' 
-    : `file://${path.join(__dirname, '../build/index.html')}`;
-  
-  mainWindow.loadURL(startUrl);
+  // Determine start URL / file (try several locations when packaged)
+  const startUrl = isDev ? 'http://localhost:3000' : null;
+
+  if (isDev) {
+    console.log('Loading dev url:', startUrl);
+    mainWindow.loadURL(startUrl);
+  } else {
+    // Try several likely places for the built index.html
+    const candidates = [
+      path.join(__dirname, '../build/index.html'),
+      path.join(__dirname, 'build', 'index.html'),
+      path.join(process.resourcesPath || '', 'app', 'build', 'index.html'),
+      path.join(process.resourcesPath || '', 'build', 'index.html')
+    ];
+
+    let found = null;
+    for (const c of candidates) {
+      try {
+        if (fs.existsSync(c)) { found = c; break; }
+      } catch (e) {}
+    }
+
+    if (found) {
+      const fileUrl = `file://${found}`;
+      console.log('Loading production file URL:', fileUrl);
+      mainWindow.loadURL(fileUrl).catch(err => {
+        console.error('Failed to load production file URL:', fileUrl, err);
+      });
+    } else {
+      console.error('No build index.html found. Tried:', candidates);
+      // Show a small fallback page so users know something went wrong
+      const msg = encodeURIComponent('<h1>FamSync</h1><p>Application failed to start: index.html not found.</p>');
+      mainWindow.loadURL(`data:text/html,${msg}`);
+    }
+  }
 
   // Open DevTools in development
   if (isDev) {
@@ -132,8 +162,8 @@ function createWindow() {
     }
   });
 
-  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL) => {
-    console.error('Failed to load URL:', validatedURL, 'Error:', errorDescription);
+  mainWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription, validatedURL, isMainFrame) => {
+    console.error('Failed to load URL:', validatedURL, 'errorCode:', errorCode, 'isMainFrame:', isMainFrame, 'Error:', errorDescription);
   });
 
   // Temporarily enable web security for testing
