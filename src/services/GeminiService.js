@@ -142,7 +142,57 @@ Keep the response friendly and family-focused, under 200 words.
       
     } catch (error) {
       console.error('Availability summary generation failed:', error);
-      throw new Error('Failed to generate availability summary');
+      // Fallback: produce a simple local summary when Gemini model/method isn't available
+      try {
+        // Aggregate events per account
+        const counts = {};
+        (events || []).forEach(ev => {
+          const acct = ev.accountName || ev.accountEmail || 'Unknown';
+          counts[acct] = (counts[acct] || 0) + 1;
+        });
+
+        let busiest = 'No events';
+        if (Object.keys(counts).length) {
+          busiest = Object.keys(counts).reduce((a, b) => counts[a] > counts[b] ? a : b);
+        }
+
+        // Find free hours between 9-17 with fewest events
+        const hourCounts = Array.from({ length: 24 }, () => 0);
+        (events || []).forEach(ev => {
+          const start = ev.start?.dateTime || ev.start?.date;
+          const end = ev.end?.dateTime || ev.end?.date;
+          let s = start ? new Date(start) : null;
+          let e = end ? new Date(end) : null;
+          if (!s || !e) return;
+          const sh = s.getHours();
+          const eh = e.getHours();
+          for (let h = Math.max(0, sh); h <= Math.min(23, eh); h++) hourCounts[h]++;
+        });
+
+        const candidateHours = [];
+        for (let h = 9; h <= 17; h++) candidateHours.push({ h, c: hourCounts[h] });
+        candidateHours.sort((a, b) => a.c - b.c);
+        const best = candidateHours.slice(0, 3).map(x => `${x.h}:00`);
+
+        // Weekend availability
+        const weekendEvents = (events || []).filter(ev => {
+          const s = ev.start?.dateTime || ev.start?.date;
+          if (!s) return false;
+          const d = new Date(s);
+          return d.getDay() === 0 || d.getDay() === 6;
+        });
+
+        const summaryParts = [];
+        summaryParts.push(`Busiest calendar: ${busiest}`);
+        if (best.length) summaryParts.push(`Good meeting times: ${best.join(', ')}`);
+        summaryParts.push(`${(events || []).length} events in the selected range.`);
+        summaryParts.push(weekendEvents.length ? `There are ${weekendEvents.length} weekend events.` : 'Weekend looks mostly free.');
+
+        return summaryParts.join(' ');
+      } catch (fallbackErr) {
+        console.error('Fallback summary failed:', fallbackErr);
+        throw new Error('Failed to generate availability summary');
+      }
     }
   }
 
