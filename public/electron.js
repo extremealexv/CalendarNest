@@ -439,3 +439,32 @@ ipcMain.handle('wait-auth-code', async (event, { serverId }) => {
     }, 2 * 60 * 1000);
   });
 });
+
+// Refresh auth tokens in main process (avoids CORS and allows client_secret)
+ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
+  try {
+    const tokenUrl = 'https://oauth2.googleapis.com/token';
+    const params = new URLSearchParams();
+    params.append('client_id', process.env.REACT_APP_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '');
+    const clientSecret = process.env.REACT_APP_GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '';
+    if (clientSecret) params.append('client_secret', clientSecret);
+    params.append('grant_type', 'refresh_token');
+    params.append('refresh_token', refreshToken || '');
+
+    const resp = await fetch(tokenUrl, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: params.toString()
+    });
+
+    const json = await resp.json();
+    if (!resp.ok) {
+      throw new Error(JSON.stringify(json));
+    }
+
+    return { success: true, tokens: json };
+  } catch (err) {
+    console.error('refresh-auth-token failed', err);
+    return { success: false, error: String(err) };
+  }
+});

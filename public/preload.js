@@ -11,4 +11,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Loopback helpers
   createLoopbackServer: () => ipcRenderer.invoke('create-loopback-server'),
   waitForAuthCode: (serverId) => ipcRenderer.invoke('wait-auth-code', { serverId })
+  ,
+  refreshAuthToken: (payload) => ipcRenderer.invoke('refresh-auth-token', payload)
 });

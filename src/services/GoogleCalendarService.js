@@ -202,8 +202,11 @@ class GoogleCalendarService {
     if (!account || !account.tokens || !account.tokens.refresh_token) return false;
 
     // Simple expiry check
-    const expiry = account.tokens.expires_in && account.tokens.authenticatedAt
-      ? new Date(account.tokens.authenticatedAt).getTime() + (account.tokens.expires_in * 1000)
+    // We store authentication timestamp as account.authenticatedAt (top-level).
+    // Some token payloads may include expiry_date; prefer explicit timestamps when available.
+    const authTs = account.authenticatedAt || account.tokens.authenticatedAt || null;
+    const expiry = (account.tokens.expires_in && authTs)
+      ? new Date(authTs).getTime() + (account.tokens.expires_in * 1000)
       : (account.tokens.expiry_date || 0);
 
     if (expiry && Date.now() < expiry - 60000) return true; // still valid
@@ -214,20 +217,33 @@ class GoogleCalendarService {
       refresh_token: account.tokens.refresh_token
     });
 
-    const resp = await fetch(TOKEN_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString()
-    });
+    // Prefer main-process refresh (handles client_secret and avoids CORS)
+    if (window.electronAPI && typeof window.electronAPI.refreshAuthToken === 'function') {
+      const result = await window.electronAPI.refreshAuthToken({ refreshToken: account.tokens.refresh_token });
+      if (!result || !result.success) {
+        console.warn('Refresh token failed for', accountId, 'via main process', result && result.error);
+        return false;
+      }
+      var newTokens = result.tokens;
+    } else {
+      const resp = await fetch(TOKEN_ENDPOINT, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: body.toString()
+      });
 
-    if (!resp.ok) {
-      console.warn('Refresh token failed for', accountId);
-      return false;
+      if (!resp.ok) {
+        const txt = await resp.text().catch(() => '<no-body>');
+        console.warn('Refresh token failed for', accountId, 'status=', resp.status, 'body=', txt);
+        return false;
+      }
+
+      var newTokens = await resp.json();
     }
-
-    const newTokens = await resp.json();
     // Merge tokens
     account.tokens = { ...account.tokens, ...newTokens };
+    // Update authenticatedAt when we receive new tokens
+    account.authenticatedAt = new Date().toISOString();
     this.accounts.set(accountId, account);
 
     // Persist updated tokens
