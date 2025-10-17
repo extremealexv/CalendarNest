@@ -104,16 +104,14 @@
   background: #4CAF50;
   color: white;
   font-size: 0.75rem;
-  padding: 2px 4px;
-  border-radius: 3px;
-  text-overflow: ellipsis;
+  padding: 4px 6px;
+  border-radius: 4px;
   overflow: hidden;
-  white-space: nowrap;
   cursor: pointer;
   transition: all 0.2s ease;
   display: flex;
-  align-items: center;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 6px;
 }
 
 .event-item:hover {
@@ -131,7 +129,14 @@
 .event-title {
   flex: 1;
   overflow: hidden;
-  text-overflow: ellipsis;
+  /* Allow wrapping up to 2 lines; fall back to single-line ellipsis if not supported */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 .more-events {
