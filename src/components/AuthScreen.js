@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { qrCodeService } from '../services/QRCodeService';
 import { authService } from '../services/AuthService';
+import { googleCalendarService } from '../services/GoogleCalendarService';
 import './AuthScreen.css';
 
 const AuthScreen = ({ onAuthenticate }) => {
@@ -10,6 +11,8 @@ const AuthScreen = ({ onAuthenticate }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [cameraStream, setCameraStream] = useState(null);
+  const [pendingAccount, setPendingAccount] = useState(null);
+  const [nicknameInput, setNicknameInput] = useState('');
   
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
@@ -34,7 +37,11 @@ const AuthScreen = ({ onAuthenticate }) => {
       // startAuthentication now completes the full flow and returns the account
       const account = await authService.startAuthentication();
       // In web flows, startAuthentication may redirect the browser and not return an account.
-      if (account) onAuthenticate(account);
+      if (account) {
+        // prompt for nickname
+        setPendingAccount(account);
+        setNicknameInput(account.nickname || '');
+      }
     } catch (error) {
       console.error('Manual authentication failed:', error);
       setError(error.message || 'Authentication failed');
@@ -59,7 +66,9 @@ const AuthScreen = ({ onAuthenticate }) => {
         
         if (status.status === 'completed' && status.accountData) {
           clearInterval(pollInterval);
-          onAuthenticate(status.accountData);
+            // prompt for nickname
+            setPendingAccount(status.accountData);
+            setNicknameInput(status.accountData.nickname || '');
         } else if (status.status === 'expired' || status.status === 'not_found') {
           clearInterval(pollInterval);
           setError('QR code expired. Please generate a new one.');
@@ -146,6 +155,33 @@ const AuthScreen = ({ onAuthenticate }) => {
       setError(error.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const saveNicknameAndFinish = async () => {
+    if (!pendingAccount) return;
+    try {
+      setLoading(true);
+      if (nicknameInput && pendingAccount.id) {
+        await googleCalendarService.saveAccountMeta(pendingAccount.id, { nickname: nicknameInput });
+        pendingAccount.nickname = nicknameInput;
+      }
+      onAuthenticate(pendingAccount);
+      setPendingAccount(null);
+      setNicknameInput('');
+    } catch (err) {
+      console.error('Failed to save nickname', err);
+      setError('Failed to save nickname');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const cancelNickname = () => {
+    if (pendingAccount) {
+      onAuthenticate(pendingAccount);
+      setPendingAccount(null);
+      setNicknameInput('');
     }
   };
 
@@ -322,6 +358,17 @@ const AuthScreen = ({ onAuthenticate }) => {
       {authMode === 'qr' && renderQRScreen()}
       {authMode === 'scanning' && renderScanningScreen()}
       
+      {pendingAccount && (
+        <div className="nickname-prompt" style={{ position: 'fixed', bottom: 16, left: 16, right: 16, background: 'white', padding: 16, borderRadius: 8 }}>
+          <h3>Give this account a nickname (optional)</h3>
+          <input value={nicknameInput} onChange={(e) => setNicknameInput(e.target.value)} placeholder="e.g. Mom's phone" style={{ padding: 8, width: '100%', marginBottom: 8 }} />
+          <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+            <button className="btn btn-secondary" onClick={cancelNickname}>Skip</button>
+            <button className="btn btn-primary" onClick={saveNicknameAndFinish}>Save</button>
+          </div>
+        </div>
+      )}
+
       {loading && (
         <div className="auth-loading">
           <div className="spinner"></div>

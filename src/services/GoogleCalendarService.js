@@ -10,9 +10,26 @@ function base64UrlEncode(buffer) {
 }
 
 async function sha256(buffer) {
-  const msgUint8 = new TextEncoder().encode(buffer);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
-  return new Uint8Array(hashBuffer);
+  // Prefer Web Crypto API when available
+  try {
+    if (typeof crypto !== 'undefined' && crypto.subtle && typeof crypto.subtle.digest === 'function') {
+      const msgUint8 = new TextEncoder().encode(buffer);
+      const hashBuffer = await crypto.subtle.digest('SHA-256', msgUint8);
+      return new Uint8Array(hashBuffer);
+    }
+  } catch (e) {
+    // fall through to JS fallback
+  }
+
+  // Fallback: use js-sha256 (returns hex string)
+  try {
+    const mod = await import('js-sha256');
+    const hex = mod.sha256(buffer);
+    const bytes = new Uint8Array(hex.match(/.{2}/g).map(h => parseInt(h, 16)));
+    return bytes;
+  } catch (err) {
+    throw new Error('No crypto available for PKCE generation');
+  }
 }
 
 class GoogleCalendarService {
@@ -29,9 +46,23 @@ class GoogleCalendarService {
   }
 
   generateRandomString(length) {
-    const array = new Uint8Array(length);
-    crypto.getRandomValues(array);
-    return Array.from(array, dec => ('0' + dec.toString(16)).slice(-2)).join('');
+    // Prefer secure RNG when available
+    try {
+      if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+        const array = new Uint8Array(length);
+        crypto.getRandomValues(array);
+        return Array.from(array, dec => ('0' + dec.toString(16)).slice(-2)).join('');
+      }
+    } catch (e) {
+      // fall back to Math.random
+    }
+
+    // Fallback (not cryptographically strong) for environments without crypto
+    let result = '';
+    for (let i = 0; i < length; i++) {
+      result += ('0' + (Math.floor(Math.random() * 256)).toString(16)).slice(-2);
+    }
+    return result;
   }
 
   // Build auth URL for PKCE
