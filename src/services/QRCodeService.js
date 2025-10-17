@@ -28,8 +28,9 @@ class QRCodeService {
         status: 'pending'
       });
 
-      // Generate QR code
-      const qrDataUrl = await QRCode.toDataURL(JSON.stringify(authData), {
+      // Generate QR code containing the auth URL (so scanning opens the link)
+      // Note: older clients parsed JSON payloads; `processQRData` below still supports JSON.
+      const qrDataUrl = await QRCode.toDataURL(authData.authUrl, {
         width: 300,
         margin: 2,
         color: {
@@ -105,8 +106,8 @@ class QRCodeService {
   // Process QR code data
   async processQRData(qrData) {
     try {
+      // Try JSON payload first (backwards compatibility)
       const data = JSON.parse(qrData);
-      
       switch (data.type) {
         case 'famsync_auth':
           return await this.handleAuthQR(data);
@@ -115,8 +116,22 @@ class QRCodeService {
         default:
           throw new Error('Invalid QR code type');
       }
-    } catch (error) {
-      console.error('Failed to process QR data:', error);
+    } catch (err) {
+      // If it's not JSON, treat it as a plain URL (common case for mobile scanning)
+      try {
+        const text = String(qrData).trim();
+        if (/^https?:\/\//i.test(text)) {
+          // Attempt to extract sessionId from URL like /auth/qr/:sessionId
+          const m = text.match(/\/auth\/qr\/([^\/?#]+)/i);
+          const sessionId = m ? m[1] : null;
+          const authData = { type: 'famsync_auth', sessionId, authUrl: text };
+          return await this.handleAuthQR(authData);
+        }
+      } catch (e2) {
+        console.error('Failed to interpret QR as URL:', e2);
+      }
+
+      console.error('Failed to process QR data:', err);
       throw new Error('Invalid QR code');
     }
   }
@@ -126,12 +141,13 @@ class QRCodeService {
     try {
       // Check if session exists and is valid
       const session = this.authSessions.get(authData.sessionId);
-      
+
       if (!session) {
         throw new Error('Invalid or expired session');
       }
 
-      if (Date.now() > authData.expires) {
+      // Use the stored session expiry (not the payload) for validation
+      if (Date.now() > session.expires) {
         this.authSessions.delete(authData.sessionId);
         throw new Error('QR code has expired');
       }
@@ -139,11 +155,11 @@ class QRCodeService {
       // Mark session as scanned
       session.status = 'scanned';
       session.scannedAt = Date.now();
-      
+
       return {
         type: 'auth',
         sessionId: authData.sessionId,
-        authUrl: authData.authUrl,
+        authUrl: authData.authUrl || session.authUrl,
         success: true
       };
     } catch (error) {
