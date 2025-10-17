@@ -115,10 +115,27 @@ function App() {
     console.log('Rendering LoadingScreen');
     return <LoadingScreen />;
   }
+  if (!isAuthenticated) {
+    return (
+      <div className="app" style={{ minHeight: '100vh' }}>
+        <AuthScreen onAuthenticate={handleAuthentication} />
+      </div>
+    );
+  }
 
   return (
     <div className="app" style={{ minHeight: '100vh' }}>
-      <AuthScreen onAuthenticate={handleAuthentication} />
+      <Header accounts={accounts} onLogout={handleLogout} onViewChange={handleViewChange} />
+      <div className="main-content" style={{ padding: '16px' }}>
+        <CalendarView
+          view={currentView}
+          events={events}
+          selectedDate={selectedDate}
+          onDateChange={handleDateChange}
+          onEventCreate={handleEventCreate}
+          accounts={accounts}
+        />
+      </div>
     </div>
   );
 }
