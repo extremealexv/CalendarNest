@@ -20,6 +20,12 @@ module.exports = function override(config, env) {
     "buffer": false,
   };
 
+  // Alias process/browser to the installed process package for older modules
+  config.resolve.alias = {
+    ...(config.resolve.alias || {}),
+    'process/browser': require.resolve('process/browser')
+  };
+
   // Add buffer plugin
   config.plugins = [
     ...config.plugins,
