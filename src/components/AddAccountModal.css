@@ -1,0 +1,46 @@
+.add-account-modal {
+  position: fixed;
+  left: 0;
+  right: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 3000;
+}
+
+.modal-content {
+  width: 900px;
+  max-width: 95%;
+  max-height: 90%;
+  background: #fff;
+  border-radius: 12px;
+  overflow: auto;
+  position: relative;
+}
+
+.modal-close {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  border: none;
+  background: transparent;
+  font-size: 1.4rem;
+}
+
+.nickname-stage {
+  padding: 24px;
+}
+
+.nickname-stage input {
+  width: 100%;
+  padding: 10px 12px;
+  font-size: 1rem;
+  margin: 12px 0 16px;
+}
+
+.actions { display:flex; gap:8px; justify-content:flex-end; padding: 0 24px 24px; }
+
+.auth-wrapper { height: 640px; }

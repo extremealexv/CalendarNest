@@ -173,10 +173,13 @@ class GoogleCalendarService {
         if (!tokens) continue;
         try {
           const userInfo = await this.fetchUserInfo(tokens.access_token);
+          // Try to read metadata (nickname) from tokens storage if present
+          const rawMeta = tokens.meta || {};
           const accountData = {
             id: userInfo.id,
             email: userInfo.email,
             name: userInfo.name,
+            nickname: rawMeta.nickname || '',
             picture: userInfo.picture,
             tokens: tokens,
             authenticatedAt: new Date().toISOString()
@@ -407,6 +410,22 @@ class GoogleCalendarService {
 
   getAccounts() {
     return Array.from(this.accounts.values());
+  }
+
+  // Save account metadata (e.g., nickname) into secure store via preload
+  async saveAccountMeta(accountId, meta) {
+    if (window.electronAPI && typeof window.electronAPI.saveAccountMeta === 'function') {
+      const result = await window.electronAPI.saveAccountMeta(accountId, meta);
+      if (!result || !result.success) throw new Error(result && result.error);
+      // update in-memory copy
+      const acc = this.accounts.get(accountId);
+      if (acc) {
+        acc.nickname = meta.nickname || acc.nickname || '';
+        this.accounts.set(accountId, acc);
+      }
+      return true;
+    }
+    return false;
   }
 }
 

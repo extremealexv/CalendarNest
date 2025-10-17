@@ -369,6 +369,20 @@ ipcMain.handle('list-accounts', async () => {
   return Object.keys(all);
 });
 
+// Save account metadata (e.g., nickname) merged with tokens file
+ipcMain.handle('save-account-meta', async (event, { accountId, meta }) => {
+  try {
+    const all = readTokensFile();
+    if (!all[accountId]) all[accountId] = {};
+    all[accountId].meta = { ...(all[accountId].meta || {}), ...(meta || {}) };
+    writeTokensFile(all);
+    return { success: true };
+  } catch (err) {
+    console.error('save-account-meta failed', err);
+    return { success: false, error: String(err) };
+  }
+});
+
 // Exchange auth code for tokens in main process (avoids CORS)
 ipcMain.handle('exchange-auth-code', async (event, { code, codeVerifier, redirectUri }) => {
   try {

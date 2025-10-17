@@ -133,6 +133,9 @@ const Header = ({
                     />
                     <div className="account-details">
                       <span className="account-name">{account.name}</span>
+                      {account.nickname ? (
+                        <span className="account-nickname">{account.nickname}</span>
+                      ) : null}
                       <span className="account-email">{account.email}</span>
                     </div>
                   </div>
@@ -147,10 +150,7 @@ const Header = ({
               <div className="dropdown-divider"></div>
             </div>
           </div>
-          {/* Quick add-account button visible outside the dropdown for touch/kiosk users */}
-          <button className="btn add-quick-btn" onClick={() => onAddAccount && onAddAccount()} title="Add account">
-            +
-          </button>
+          {/* quick add button removed — use dropdown Add Account for consistency */}
         </div>
       </div>
     </header>

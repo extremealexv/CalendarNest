@@ -7,6 +7,7 @@ import Header from './components/Header';
 import CalendarView from './components/CalendarView';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
+import AddAccountModal from './components/AddAccountModal';
 
 // Import services
 import { googleCalendarService } from './services/GoogleCalendarService';
@@ -92,14 +93,25 @@ function App() {
   };
 
   const handleAddAccount = async () => {
+    // Open modal which performs auth then asks for nickname
+    setShowAddModal(true);
+  };
+
+  const [showAddModal, setShowAddModal] = useState(false);
+
+  const handleAddModalComplete = async (accountWithNickname) => {
     try {
+      setShowAddModal(false);
       setLoading(true);
-      const account = await authService.startAuthentication();
-      if (account) {
-        await handleAuthentication(account);
+      // accountWithNickname is returned from modal after auth and nickname
+      // Persist nickname metadata
+      if (accountWithNickname && accountWithNickname.id) {
+        await googleCalendarService.saveAccountMeta(accountWithNickname.id, { nickname: accountWithNickname.nickname });
       }
+      // Add to UI and reload calendars
+      await handleAuthentication(accountWithNickname);
     } catch (err) {
-      console.error('Add account failed:', err);
+      console.error('Failed to finalize added account', err);
     } finally {
       setLoading(false);
     }
@@ -148,6 +160,13 @@ function App() {
         selectedDate={selectedDate}
         onDateChange={handleDateChange}
       />
+      {showAddModal && (
+        <AddAccountModal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          onComplete={handleAddModalComplete}
+        />
+      )}
       <div className="main-content" style={{ padding: '16px' }}>
         <CalendarView
           view={currentView}
