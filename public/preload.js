@@ -14,4 +14,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   waitForAuthCode: (serverId) => ipcRenderer.invoke('wait-auth-code', { serverId })
   ,
   refreshAuthToken: (payload) => ipcRenderer.invoke('refresh-auth-token', payload)
+  ,
+  speakText: (text) => ipcRenderer.invoke('speak-text', { text })
 });

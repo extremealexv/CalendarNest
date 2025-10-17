@@ -512,3 +512,89 @@ ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
     return { success: false, error: String(err) };
   }
 });
+
+// TTS: speak-text handler uses espeak and aplay to ensure audio on headless kiosks
+ipcMain.handle('speak-text', async (event, { text }) => {
+  return new Promise((resolve, reject) => {
+    try {
+      if (!text) return resolve({ success: false, error: 'No text provided' });
+
+      // Try to detect HDMI/physical sinks via pactl (PulseAudio). If PulseAudio isn't available,
+      // fall back to using default ALSA device via aplay. We spawn a short shell pipeline:
+      // espeak "text" --stdout | aplay -D <device>
+      const { spawn } = require('child_process');
+
+      // Helper to run pactl and parse sinks
+      const detectPulseHDMI = () => {
+        return new Promise((res) => {
+          const pactl = spawn('pactl', ['list', 'short', 'sinks']);
+          let out = '';
+          let err = '';
+          pactl.stdout.on('data', d => out += d.toString());
+          pactl.stderr.on('data', d => err += d.toString());
+          pactl.on('close', (code) => {
+            if (code !== 0) return res(null);
+            try {
+              const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+              for (const line of lines) {
+                // Format: index\tname\tmodule\tsample\tstate
+                const parts = line.split(/\s+/);
+                if (parts.length >= 2) {
+                  const name = parts[1];
+                  if (name.toLowerCase().includes('hdmi') || name.toLowerCase().includes('ahubhdmi') || name.toLowerCase().includes('hdmi-sink')) {
+                    return res(name);
+                  }
+                }
+              }
+            } catch (e) {
+              // ignore
+            }
+            return res(null);
+          });
+        });
+      };
+
+      (async () => {
+        let device = null;
+        try {
+          device = await detectPulseHDMI();
+        } catch (e) {
+          device = null;
+        }
+
+        // Build pipeline: espeak -> aplay. If pactl found an external sink name, use aplay -D <sink>
+        // Otherwise, rely on default aplay device.
+        const espeakArgs = ['--stdout', text];
+        const espeak = spawn('espeak', espeakArgs);
+
+        const aplayArgs = [];
+        if (device) {
+          // For PulseAudio sink names we pass the sink name to aplay (-D). Some systems expect "pulse" or "plughw:0,0".
+          // aplay can accept "plughw:X,Y". We'll attempt to use the PulseAudio "sink" name directly with aplay -D.
+          aplayArgs.push('-D', device);
+        }
+
+        const aplay = spawn('aplay', aplayArgs);
+
+        espeak.stdout.pipe(aplay.stdin);
+
+        let stderr = '';
+        aplay.stderr.on('data', d => stderr += d.toString());
+        aplay.on('close', (code) => {
+          if (code === 0) return resolve({ success: true });
+          return reject(new Error('aplay exited with code ' + code + ' stderr: ' + stderr));
+        });
+
+        // Safety timeout: resolve after 30s if process hangs
+        setTimeout(() => {
+          try { espeak.kill(); } catch (e) {}
+          try { aplay.kill(); } catch (e) {}
+          resolve({ success: true, timeout: true });
+        }, 30 * 1000);
+      })();
+    } catch (err) {
+      console.error('speak-text failed', err);
+      return reject(err);
+    }
+  });
+});

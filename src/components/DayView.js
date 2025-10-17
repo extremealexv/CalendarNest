@@ -73,30 +73,54 @@ const DayView = ({
 
                 const text = typeof summary === 'string' ? summary : String(summary);
 
-                // Try browser/electron TTS
+                // Try browser/electron TTS first, then fall back to main-process espeak via preload
+                setAssistantText(text);
+                let handled = false;
                 if (typeof window !== 'undefined' && window.speechSynthesis) {
                   try {
                     const utter = new SpeechSynthesisUtterance(text);
-                    // small voice selection heuristic
                     const voices = window.speechSynthesis.getVoices();
                     if (voices && voices.length) utter.voice = voices[0];
-                    utter.onend = () => setIsSpeaking(false);
-                    utter.onerror = () => setIsSpeaking(false);
+                    utter.onend = () => { setIsSpeaking(false); handled = true; };
+                    utter.onerror = async () => {
+                      // try main process fallback
+                      try {
+                        if (window.electronAPI && window.electronAPI.speakText) {
+                          await window.electronAPI.speakText(text);
+                        }
+                      } catch (ex) {
+                        console.warn('Main-process TTS failed', ex);
+                      } finally {
+                        setIsSpeaking(false);
+                      }
+                    };
                     window.speechSynthesis.speak(utter);
-                    setAssistantText(text);
+                    handled = true;
                   } catch (err) {
-                    // fallback: show text briefly
-                    setAssistantText(text);
-                    const words = text.split(/\s+/).length;
-                    const estMs = Math.max(3000, (words / 2) * 1000); // crude
-                    setTimeout(() => setIsSpeaking(false), estMs);
+                    console.warn('Web Speech error, falling back to main TTS', err);
                   }
-                } else {
-                  // No TTS available: show text bubble for a brief time
-                  setAssistantText(text);
-                  const words = text.split(/\s+/).length;
-                  const estMs = Math.max(3000, (words / 2) * 1000);
-                  setTimeout(() => setIsSpeaking(false), estMs);
+                }
+
+                if (!handled) {
+                  // No Web Speech available or it failed synchronously — use main-process TTS if available
+                  try {
+                    if (window.electronAPI && window.electronAPI.speakText) {
+                      await window.electronAPI.speakText(text);
+                    } else {
+                      // final fallback: display text for estimated duration
+                      const words = text.split(/\s+/).length;
+                      const estMs = Math.max(3000, (words / 2) * 1000);
+                      setTimeout(() => setIsSpeaking(false), estMs);
+                    }
+                  } catch (ex) {
+                    console.warn('Fallback TTS failed', ex);
+                    const words = text.split(/\s+/).length;
+                    const estMs = Math.max(3000, (words / 2) * 1000);
+                    setTimeout(() => setIsSpeaking(false), estMs);
+                  } finally {
+                    // ensure speaking state cleared if speakText returns quickly
+                    setIsSpeaking(false);
+                  }
                 }
               } catch (err) {
                 console.warn('Gemini read failed', err);
