@@ -2,6 +2,7 @@
   "name": "famsync-kiosk",
   "version": "1.0.0",
   "description": "Family Calendar Kiosk App - React + Electron for Ubuntu touchscreen displays",
+  "homepage": ".",
   "main": "public/electron.js",
   "private": true,
   "scripts": {
