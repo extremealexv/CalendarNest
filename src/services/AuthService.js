@@ -26,7 +26,7 @@ class AuthService {
     await this.initialize();
     try {
       // Use loopback server flow: create server, open auth URL, wait for code
-  const { authUrl, serverId, codeVerifier } = await googleCalendarService.createAuthWithLoopback(accountHint);
+  const { authUrl, serverId, codeVerifier, redirectUri } = await googleCalendarService.createAuthWithLoopback(accountHint);
 
       // Start waiting for the loopback server to receive the auth code
       // and open the auth window without blocking the wait (openAuthWindow
@@ -39,7 +39,8 @@ class AuthService {
 
       if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
         // open a window pointing to the auth page but don't await it
-        window.electronAPI.openAuthWindow(authUrl).catch(() => {});
+        // include serverId so the main process can attach and close the window
+        window.electronAPI.openAuthWindow({ authUrl, serverId }).catch(() => {});
       } else {
         window.open(authUrl, 'google-auth', 'width=600,height=700');
       }
@@ -48,8 +49,8 @@ class AuthService {
   const result = await waitPromise;
   if (!result || !result.code) throw new Error('Authentication failed or timed out');
 
-  // Complete auth exchange, pass codeVerifier returned by createAuthWithLoopback
-  const account = await googleCalendarService.authenticateWithCode(result.code, codeVerifier);
+  // Complete auth exchange, pass codeVerifier and redirectUri returned by createAuthWithLoopback
+  const account = await googleCalendarService.authenticateWithCode(result.code, codeVerifier, redirectUri);
       return account;
     } catch (err) {
       console.error('startAuthentication error', err);

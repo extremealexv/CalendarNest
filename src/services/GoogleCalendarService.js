@@ -43,6 +43,8 @@ class GoogleCalendarService {
 
     const { codeVerifier, codeChallenge } = await this.generatePKCECodes();
     sessionStorage.setItem('famsync_pkce_verifier', codeVerifier);
+  // Save the loopback redirect for fallback exchanges that may run in the renderer
+  sessionStorage.setItem('famsync_pkce_redirect', redirectUri);
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -85,28 +87,27 @@ class GoogleCalendarService {
   }
 
   // Exchange code for tokens using PKCE
-  async exchangeCodeForTokens(code, codeVerifier = null) {
+  async exchangeCodeForTokens(code, codeVerifier = null, redirectUri = null) {
     let verifier = codeVerifier || sessionStorage.getItem('famsync_pkce_verifier');
     if (!verifier) throw new Error('Missing PKCE code verifier');
 
     if (window.electronAPI && typeof window.electronAPI.exchangeCode === 'function') {
       // Pass the redirectUri that was used by the loopback server so the
       // token endpoint receives a matching redirect_uri parameter.
-      const redirectUri = sessionStorage.getItem('famsync_pkce_redirect') || '';
-      const result = await window.electronAPI.exchangeCode({ code, codeVerifier: verifier, redirectUri });
+      const result = await window.electronAPI.exchangeCode({ code, codeVerifier: verifier, redirectUri: redirectUri || '' });
       if (!result || !result.success) throw new Error(result.error || 'exchange failed');
       return result.tokens;
     }
 
     // Fallback to renderer-side exchange (may hit CORS)
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
-    const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI;
+    const finalRedirect = redirectUri || process.env.REACT_APP_GOOGLE_REDIRECT_URI || '';
     const body = new URLSearchParams({
       client_id: clientId,
       code: code,
-      redirect_uri: redirectUri,
+      redirect_uri: finalRedirect,
       grant_type: 'authorization_code',
-      code_verifier: codeVerifier
+      code_verifier: verifier
     });
 
     const resp = await fetch(TOKEN_ENDPOINT, {
@@ -133,8 +134,8 @@ class GoogleCalendarService {
   }
 
   // Complete authentication using code (renderer-side PKCE exchange)
-  async authenticateWithCode(code, codeVerifier = null) {
-    const tokens = await this.exchangeCodeForTokens(code, codeVerifier);
+  async authenticateWithCode(code, codeVerifier = null, redirectUri = null) {
+    const tokens = await this.exchangeCodeForTokens(code, codeVerifier, redirectUri);
     const userInfo = await this.fetchUserInfo(tokens.access_token);
 
     const accountData = {
