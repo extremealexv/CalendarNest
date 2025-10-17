@@ -1,5 +1,5 @@
 import React from 'react';
-import { startOfWeek, addDays, addHours, isSameDay, isToday } from 'date-fns';
+import { startOfWeek, addDays, addHours, isSameDay, isToday, startOfDay, endOfDay } from 'date-fns';
 import { safeFormat, safeParse } from '../utils/dateUtils';
 import './WeekView.css';
 
@@ -40,25 +40,28 @@ const WeekView = ({
 
   const getEventsForTimeSlot = (day, hour) => {
     return events.filter(event => {
-      const eventStart = safeParse(event.start?.dateTime || event.start?.date);
-      const eventEnd = safeParse(event.end?.dateTime || event.end?.date);
+      const start = event.parsedStart || safeParse(event.start?.dateTime || event.start?.date);
+      const end = event.parsedEnd || safeParse(event.end?.dateTime || event.end?.date);
+      if (!start || !end) return false;
 
-      if (!eventStart || !eventEnd) return false;
-
-      if (event.start?.date && !event.start?.dateTime) {
-        // All-day event
-        return isSameDay(eventStart, day);
+      if (event.allDay) {
+        return isSameDay(start, day);
       }
 
-      return isSameDay(eventStart, day) && 
-             eventStart.getHours() <= hour && 
-             eventEnd.getHours() > hour;
+      // Determine hour interval for this slot
+      const slotStart = new Date(day);
+      slotStart.setHours(hour, 0, 0, 0);
+      const slotEnd = new Date(day);
+      slotEnd.setHours(hour + 1, 0, 0, 0);
+
+      // Overlap check: event.start < slotEnd && event.end > slotStart
+      return start < slotEnd && end > slotStart;
     });
   };
 
   const renderTimeSlots = () => {
-    return hours.map(hour => {
-    const timeLabel = safeFormat(addHours(new Date().setHours(hour, 0, 0, 0), 0), 'HH:mm', '');
+  return hours.map(hour => {
+  const timeLabel = safeFormat(new Date().setHours(hour, 0, 0, 0), 'HH:mm', '');
       
       return (
         <div key={hour} className="week-time-row">

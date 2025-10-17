@@ -1,5 +1,5 @@
 import React from 'react';
-import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday } from 'date-fns';
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday, startOfDay, endOfDay } from 'date-fns';
 import { safeFormat } from '../utils/dateUtils';
 import './MonthView.css';
 
@@ -52,8 +52,11 @@ const MonthView = ({
   formattedDate = safeFormat(day, 'd', '');
         const cloneDay = day;
         const dayEvents = events.filter(event => {
-          const eventDate = new Date(event.start?.dateTime || event.start?.date);
-          return isSameDay(eventDate, day);
+          const start = event.parsedStart || new Date(event.start?.dateTime || event.start?.date);
+          const end = event.parsedEnd || new Date(event.end?.dateTime || event.end?.date || event.start?.dateTime || event.start?.date);
+          if (!start) return false;
+          // Include event if any part of it falls on this day
+          return !(end < startOfDay(day) || start > endOfDay(day));
         });
 
         days.push(
@@ -80,9 +83,9 @@ const MonthView = ({
                     }}
                     title={event.summary || event.title}
                   >
-                    {event.start?.dateTime && (
+                    {!event.allDay && event.parsedStart && (
                       <span className="event-time">
-                        {safeFormat(event.start.dateTime, 'HH:mm', '')}
+                        {safeFormat(event.parsedStart, 'HH:mm', '')}
                       </span>
                     )}
                     <span className="event-title">

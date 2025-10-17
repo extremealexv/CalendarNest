@@ -334,7 +334,42 @@ class GoogleCalendarService {
             }
           }
 
+          // Compute canonical parsed dates for renderer
+          const parseDate = (v) => {
+            if (!v) return null;
+            if (v instanceof Date) return v;
+            try {
+              const d = new Date(v);
+              return isNaN(d.getTime()) ? null : d;
+            } catch (err) {
+              return null;
+            }
+          };
+
+          const parsedStart = parseDate(e.start?.dateTime || e.start?.date);
+          let parsedEnd = parseDate(e.end?.dateTime || e.end?.date);
+          const allDay = !!(e.start && e.start.date && !e.start.dateTime);
+
+          // Google Calendar's end.date for all-day events is exclusive.
+          if (allDay && e.end && e.end.date) {
+            try {
+              const endDate = new Date(e.end.date);
+              // Make inclusive by subtracting 1 millisecond (end of previous day)
+              parsedEnd = new Date(endDate.getTime() - 1);
+            } catch (err) {
+              // fallback leave parsedEnd as-is
+            }
+          }
+
+          // If timed event and no explicit end, default to +1h
+          if (!allDay && parsedStart && !parsedEnd) {
+            parsedEnd = new Date(parsedStart.getTime() + 60 * 60 * 1000);
+          }
+
           // Add helpful metadata for renderer
+          e.parsedStart = parsedStart;
+          e.parsedEnd = parsedEnd || parsedStart;
+          e.allDay = allDay;
           e.accountId = accountId;
           e.accountEmail = acct.email || accountId;
           e.calendarId = calendar.id;
