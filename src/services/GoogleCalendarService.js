@@ -85,12 +85,12 @@ class GoogleCalendarService {
   }
 
   // Exchange code for tokens using PKCE
-  async exchangeCodeForTokens(code) {
-    const codeVerifier = sessionStorage.getItem('famsync_pkce_verifier');
-    if (!codeVerifier) throw new Error('Missing PKCE code verifier');
+  async exchangeCodeForTokens(code, codeVerifier = null) {
+    let verifier = codeVerifier || sessionStorage.getItem('famsync_pkce_verifier');
+    if (!verifier) throw new Error('Missing PKCE code verifier');
 
     if (window.electronAPI && typeof window.electronAPI.exchangeCode === 'function') {
-      const result = await window.electronAPI.exchangeCode({ code, codeVerifier });
+    const result = await window.electronAPI.exchangeCode({ code, codeVerifier: verifier });
       if (!result || !result.success) throw new Error(result.error || 'exchange failed');
       return result.tokens;
     }
@@ -130,8 +130,8 @@ class GoogleCalendarService {
   }
 
   // Complete authentication using code (renderer-side PKCE exchange)
-  async authenticateWithCode(code) {
-    const tokens = await this.exchangeCodeForTokens(code);
+  async authenticateWithCode(code, codeVerifier = null) {
+    const tokens = await this.exchangeCodeForTokens(code, codeVerifier);
     const userInfo = await this.fetchUserInfo(tokens.access_token);
 
     const accountData = {

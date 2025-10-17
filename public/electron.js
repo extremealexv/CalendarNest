@@ -241,8 +241,16 @@ function writeTokensFile(data) {
 
 // IPC: Open auth window and capture redirect (PKCE-friendly)
 ipcMain.handle('open-auth-window', async (event, authUrl) => {
+  // Accept either a string (old API) or an object { authUrl, serverId }
   return new Promise((resolve, reject) => {
     try {
+      let url = authUrl;
+      let serverId = null;
+      if (authUrl && typeof authUrl === 'object') {
+        url = authUrl.authUrl;
+        serverId = authUrl.serverId || null;
+      }
+
       const authWindow = new BrowserWindow({
         width: 600,
         height: 700,
@@ -254,12 +262,22 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
         }
       });
 
-      authWindow.loadURL(authUrl);
+      // Associate authWindow with loopback server entry if provided
+      if (serverId && loopbackServers.has(String(serverId))) {
+        const entry = loopbackServers.get(String(serverId));
+        entry.authWindow = authWindow;
+        loopbackServers.set(String(serverId), entry);
+      }
 
+      authWindow.loadURL(url);
+
+      // We don't attempt to capture the redirect here when using loopback URIs
+      // because the loopback server will receive the request. Still listen for
+      // navigation events to detect direct redirects that match a configured
+      // REACT_APP_GOOGLE_REDIRECT_URI (legacy fallback).
       const handleNavigation = (newUrl) => {
         try {
           const parsed = new URL(newUrl);
-          // If the redirect URI matches our app's configured redirect, capture code
           const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI || '';
           if (redirectUri && newUrl.startsWith(redirectUri)) {
             const code = parsed.searchParams.get('code');
@@ -269,7 +287,7 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
             } else {
               reject(new Error(error || 'No code in redirect'));
             }
-            authWindow.close();
+            try { authWindow.close(); } catch (e) {}
           }
         } catch (err) {
           // ignore parse errors for other navigations
@@ -365,6 +383,14 @@ ipcMain.handle('create-loopback-server', async () => {
 
           const entry = loopbackServers.get(id);
           if (entry && entry.resolve) entry.resolve({ code, state });
+          // If an authWindow was attached to this loopback server, close it
+          try {
+            if (entry && entry.authWindow && !entry.authWindow.isDestroyed()) {
+              entry.authWindow.close();
+            }
+          } catch (e) {
+            console.error('Failed to close authWindow for loopback server', e);
+          }
         } catch (err) {
           console.error('Loopback request handling error', err);
         }

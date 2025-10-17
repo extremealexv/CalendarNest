@@ -26,22 +26,30 @@ class AuthService {
     await this.initialize();
     try {
       // Use loopback server flow: create server, open auth URL, wait for code
-      const { authUrl, serverId } = await googleCalendarService.createAuthWithLoopback(accountHint);
+  const { authUrl, serverId, codeVerifier } = await googleCalendarService.createAuthWithLoopback(accountHint);
 
-      // Open the auth URL in a window (for Electron we prefer main open)
+      // Start waiting for the loopback server to receive the auth code
+      // and open the auth window without blocking the wait (openAuthWindow
+      // may itself try to detect redirects which doesn't work with dynamic
+      // loopback URIs). We deliberately don't await openAuthWindow here so
+      // the loopback server can accept the incoming request.
+      const waitPromise = (window.electronAPI && typeof window.electronAPI.waitForAuthCode === 'function')
+        ? window.electronAPI.waitForAuthCode(serverId)
+        : Promise.reject(new Error('No loopback API available'));
+
       if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
-        // open a window pointing to the auth page
-        await window.electronAPI.openAuthWindow(authUrl);
+        // open a window pointing to the auth page but don't await it
+        window.electronAPI.openAuthWindow(authUrl).catch(() => {});
       } else {
         window.open(authUrl, 'google-auth', 'width=600,height=700');
       }
 
       // Wait for the loopback server to receive the auth code
-      const result = await window.electronAPI.waitForAuthCode(serverId);
-      if (!result || !result.code) throw new Error('Authentication failed or timed out');
+  const result = await waitPromise;
+  if (!result || !result.code) throw new Error('Authentication failed or timed out');
 
-      // Complete auth exchange
-      const account = await googleCalendarService.authenticateWithCode(result.code);
+  // Complete auth exchange, pass codeVerifier returned by createAuthWithLoopback
+  const account = await googleCalendarService.authenticateWithCode(result.code, codeVerifier);
       return account;
     } catch (err) {
       console.error('startAuthentication error', err);
