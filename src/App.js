@@ -91,6 +91,20 @@ function App() {
     setCurrentView(view);
   };
 
+  const handleAddAccount = async () => {
+    try {
+      setLoading(true);
+      const account = await authService.startAuthentication();
+      if (account) {
+        await handleAuthentication(account);
+      }
+    } catch (err) {
+      console.error('Add account failed:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDateChange = (date) => {
     setSelectedDate(date);
     if (isAuthenticated && accounts.length > 0) {
@@ -125,7 +139,7 @@ function App() {
 
   return (
     <div className="app" style={{ minHeight: '100vh' }}>
-      <Header accounts={accounts} onLogout={handleLogout} onViewChange={handleViewChange} />
+  <Header accounts={accounts} onLogout={handleLogout} onViewChange={handleViewChange} onAddAccount={handleAddAccount} />
       <div className="main-content" style={{ padding: '16px' }}>
         <CalendarView
           view={currentView}

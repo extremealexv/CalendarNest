@@ -9,7 +9,8 @@ const Header = ({
   onViewChange, 
   onLogout, 
   selectedDate, 
-  onDateChange 
+  onDateChange,
+  onAddAccount
 }) => {
   const handleDateNavigation = (direction) => {
   const newDate = safeParse(selectedDate) || new Date();
@@ -140,7 +141,7 @@ const Header = ({
                 </div>
               ))}
               <div className="dropdown-divider"></div>
-              <button className="btn btn-secondary add-account-btn">
+              <button className="btn btn-secondary add-account-btn" onClick={() => onAddAccount && onAddAccount()}>
                 + Add Account
               </button>
             </div>
