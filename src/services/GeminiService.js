@@ -1,6 +1,7 @@
 // Gemini AI Service for Natural Language Processing
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { format, parseISO, addDays, addWeeks, addMonths } from 'date-fns';
+import { safeFormat, safeParse } from '../utils/dateUtils';
 
 class GeminiService {
   constructor() {
@@ -40,7 +41,7 @@ class GeminiService {
 
     try {
       const accountsList = accounts.map(acc => `${acc.name} (${acc.email})`).join(', ');
-      const currentDateStr = format(currentDate, 'yyyy-MM-dd EEEE');
+  const currentDateStr = safeFormat(currentDate, 'yyyy-MM-dd EEEE', safeFormat(new Date(), 'yyyy-MM-dd EEEE', ''));
 
       const prompt = `
 Parse the following text into a structured calendar event. Today is ${currentDateStr}.
@@ -106,7 +107,7 @@ Only return the JSON object, no other text.
     }
 
     try {
-      const dateRange = `${format(startDate, 'MMM d')} - ${format(endDate, 'MMM d, yyyy')}`;
+  const dateRange = `${safeFormat(startDate, 'MMM d', '')} - ${safeFormat(endDate, 'MMM d, yyyy', '')}`;
       
       // Prepare events data for analysis
       const eventsData = events.map(event => ({
@@ -217,7 +218,7 @@ Only return the JSON array, no other text.
 
     // Validate dates
     if (!enhanced.startDate) {
-      enhanced.startDate = format(new Date(), 'yyyy-MM-dd');
+      enhanced.startDate = safeFormat(new Date(), 'yyyy-MM-dd', '');
     }
     
     if (!enhanced.endDate) {

@@ -40,14 +40,16 @@ const WeekView = ({
 
   const getEventsForTimeSlot = (day, hour) => {
     return events.filter(event => {
-      const eventStart = new Date(event.start?.dateTime || event.start?.date);
-      const eventEnd = new Date(event.end?.dateTime || event.end?.date);
-      
+      const eventStart = safeParse(event.start?.dateTime || event.start?.date);
+      const eventEnd = safeParse(event.end?.dateTime || event.end?.date);
+
+      if (!eventStart || !eventEnd) return false;
+
       if (event.start?.date && !event.start?.dateTime) {
         // All-day event
         return isSameDay(eventStart, day);
       }
-      
+
       return isSameDay(eventStart, day) && 
              eventStart.getHours() <= hour && 
              eventEnd.getHours() > hour;

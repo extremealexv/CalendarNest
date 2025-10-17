@@ -1,5 +1,6 @@
 import React from 'react';
 import { format } from 'date-fns';
+import { safeFormat, safeParse } from '../utils/dateUtils';
 import './Header.css';
 
 const Header = ({ 
@@ -11,7 +12,7 @@ const Header = ({
   onDateChange 
 }) => {
   const handleDateNavigation = (direction) => {
-    const newDate = new Date(selectedDate);
+  const newDate = safeParse(selectedDate) || new Date();
     
     switch (currentView) {
       case 'day':
@@ -37,17 +38,18 @@ const Header = ({
   const formatHeaderDate = () => {
     switch (currentView) {
       case 'day':
-        return format(selectedDate, 'EEEE, MMMM d, yyyy');
+        return safeFormat(selectedDate, 'EEEE, MMMM d, yyyy', '');
       case 'week':
-        const weekStart = new Date(selectedDate);
-        weekStart.setDate(selectedDate.getDate() - selectedDate.getDay());
+        const parsed = safeParse(selectedDate) || new Date();
+        const weekStart = new Date(parsed);
+        weekStart.setDate(parsed.getDate() - parsed.getDay());
         const weekEnd = new Date(weekStart);
         weekEnd.setDate(weekStart.getDate() + 6);
-        return `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`;
+        return `${safeFormat(weekStart, 'MMM d', '')} - ${safeFormat(weekEnd, 'MMM d, yyyy', '')}`;
       case 'month':
-        return format(selectedDate, 'MMMM yyyy');
+        return safeFormat(selectedDate, 'MMMM yyyy', '');
       default:
-        return format(selectedDate, 'MMMM yyyy');
+        return safeFormat(selectedDate, 'MMMM yyyy', '');
     }
   };
 
