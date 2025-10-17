@@ -139,7 +139,15 @@ function App() {
 
   return (
     <div className="app" style={{ minHeight: '100vh' }}>
-  <Header accounts={accounts} onLogout={handleLogout} onViewChange={handleViewChange} onAddAccount={handleAddAccount} />
+      <Header
+        accounts={accounts}
+        onLogout={handleLogout}
+        onViewChange={handleViewChange}
+        onAddAccount={handleAddAccount}
+        currentView={currentView}
+        selectedDate={selectedDate}
+        onDateChange={handleDateChange}
+      />
       <div className="main-content" style={{ padding: '16px' }}>
         <CalendarView
           view={currentView}

@@ -119,6 +119,10 @@ const Header = ({
               Accounts
             </button>
             <div className="dropdown-content">
+              <button className="btn btn-secondary add-account-btn" onClick={() => onAddAccount && onAddAccount()}>
+                + Add Account
+              </button>
+              <div className="dropdown-divider"></div>
               {accounts.map(account => (
                 <div key={account.id} className="account-item">
                   <div className="account-info">
@@ -141,9 +145,6 @@ const Header = ({
                 </div>
               ))}
               <div className="dropdown-divider"></div>
-              <button className="btn btn-secondary add-account-btn" onClick={() => onAddAccount && onAddAccount()}>
-                + Add Account
-              </button>
             </div>
           </div>
           {/* Quick add-account button visible outside the dropdown for touch/kiosk users */}

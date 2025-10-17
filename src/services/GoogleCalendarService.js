@@ -308,14 +308,41 @@ class GoogleCalendarService {
           maxResults: '250'
         });
 
-        const events = (data.items || []).map(event => ({
-          ...event,
-          accountId,
-          accountEmail: accountId,
-          calendarId: calendar.id,
-          calendarName: calendar.summary,
-          backgroundColor: calendar.backgroundColor || '#4285f4'
-        }));
+        const acct = this.accounts.get(accountId) || {};
+        const events = (data.items || []).map(event => {
+          const e = { ...event };
+
+          // Ensure start exists
+          e.start = e.start || {};
+          e.end = e.end || {};
+
+          // If timed event (dateTime), ensure end.dateTime exists (default +1h)
+          if (e.start.dateTime) {
+            if (!e.end.dateTime) {
+              try {
+                const s = new Date(e.start.dateTime);
+                const defaultEnd = new Date(s.getTime() + 60 * 60 * 1000);
+                e.end.dateTime = defaultEnd.toISOString();
+              } catch (err) {
+                // fallback: leave as-is
+              }
+            }
+          } else if (e.start.date) {
+            // All-day event: ensure end.date exists (default to start)
+            if (!e.end.date) {
+              e.end.date = e.start.date;
+            }
+          }
+
+          // Add helpful metadata for renderer
+          e.accountId = accountId;
+          e.accountEmail = acct.email || accountId;
+          e.calendarId = calendar.id;
+          e.calendarName = calendar.summary;
+          e.backgroundColor = calendar.backgroundColor || '#4285f4';
+
+          return e;
+        });
 
         allEvents.push(...events);
       } catch (err) {

@@ -13,9 +13,12 @@ const DayView = ({
 }) => {
   const hours = Array.from({ length: 24 }, (_, i) => i);
   
+  const parsedSelected = safeParse(selectedDate) || new Date();
+
   const dayEvents = events.filter(event => {
     const eventStart = safeParse(event.start?.dateTime || event.start?.date);
-    return isSameDay(eventStart, selectedDate);
+    if (!eventStart) return false;
+    return isSameDay(eventStart, parsedSelected);
   });
 
   const getAllDayEvents = () => {
@@ -43,9 +46,9 @@ const DayView = ({
     return (
       <div className="day-header">
         <div className="day-title">
-          <h2 className="day-name">{format(selectedDate, 'EEEE')}</h2>
-          <h3 className="day-date">{format(selectedDate, 'MMMM d, yyyy')}</h3>
-          {isToday(selectedDate) && <span className="today-badge">Today</span>}
+          <h2 className="day-name">{safeFormat(parsedSelected, 'EEEE', '')}</h2>
+          <h3 className="day-date">{safeFormat(parsedSelected, 'MMMM d, yyyy', '')}</h3>
+          {isToday(parsedSelected) && <span className="today-badge">Today</span>}
         </div>
       </div>
     );
