@@ -1,5 +1,6 @@
 import React from 'react';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday } from 'date-fns';
+import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday } from 'date-fns';
+import { safeFormat } from '../utils/dateUtils';
 import './MonthView.css';
 
 const MonthView = ({ 
@@ -19,20 +20,20 @@ const MonthView = ({
     const dateFormat = 'MMM yyyy';
     return (
       <div className="month-header">
-        <h2 className="month-title">{format(selectedDate, dateFormat)}</h2>
+        <h2 className="month-title">{safeFormat(selectedDate, dateFormat, '')}</h2>
       </div>
     );
   };
 
   const renderDays = () => {
-    const dateFormat = 'EEE';
+  const dateFormat = 'EEE';
     const days = [];
     let startDate = startOfWeek(selectedDate);
 
     for (let i = 0; i < 7; i++) {
       days.push(
         <div className="day-header" key={i}>
-          {format(addDays(startDate, i), dateFormat)}
+          {safeFormat(addDays(startDate, i), dateFormat, '')}
         </div>
       );
     }
@@ -48,7 +49,7 @@ const MonthView = ({
 
     while (day <= endDate) {
       for (let i = 0; i < 7; i++) {
-        formattedDate = format(day, 'd');
+  formattedDate = safeFormat(day, 'd', '');
         const cloneDay = day;
         const dayEvents = events.filter(event => {
           const eventDate = new Date(event.start?.dateTime || event.start?.date);
@@ -81,7 +82,7 @@ const MonthView = ({
                   >
                     {event.start?.dateTime && (
                       <span className="event-time">
-                        {format(new Date(event.start.dateTime), 'HH:mm')}
+                        {safeFormat(event.start.dateTime, 'HH:mm', '')}
                       </span>
                     )}
                     <span className="event-title">

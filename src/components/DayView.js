@@ -1,5 +1,6 @@
 import React from 'react';
-import { format, addHours, isSameDay, isToday } from 'date-fns';
+import { addHours, isSameDay, isToday } from 'date-fns';
+import { safeFormat, safeParse } from '../utils/dateUtils';
 import './DayView.css';
 
 const DayView = ({ 
@@ -13,7 +14,7 @@ const DayView = ({
   const hours = Array.from({ length: 24 }, (_, i) => i);
   
   const dayEvents = events.filter(event => {
-    const eventStart = new Date(event.start?.dateTime || event.start?.date);
+    const eventStart = safeParse(event.start?.dateTime || event.start?.date);
     return isSameDay(eventStart, selectedDate);
   });
 
@@ -31,9 +32,9 @@ const DayView = ({
 
   const getEventsForHour = (hour) => {
     return getTimedEvents().filter(event => {
-      const eventStart = new Date(event.start.dateTime);
-      const eventEnd = new Date(event.end.dateTime);
-      
+      const eventStart = safeParse(event.start.dateTime);
+      const eventEnd = safeParse(event.end.dateTime);
+      if (!eventStart || !eventEnd) return false;
       return eventStart.getHours() <= hour && eventEnd.getHours() > hour;
     });
   };
@@ -84,7 +85,7 @@ const DayView = ({
 
   const renderTimeSlots = () => {
     return hours.map(hour => {
-      const timeLabel = format(addHours(new Date().setHours(hour, 0, 0, 0), 0), 'HH:mm');
+    const timeLabel = safeFormat(addHours(new Date().setHours(hour, 0, 0, 0), 0), 'HH:mm', '');
       const hourEvents = getEventsForHour(hour);
       
       return (
@@ -96,8 +97,9 @@ const DayView = ({
           >
             {hourEvents.map((event, index) => {
               const accountIndex = accounts.findIndex(acc => acc.id === event.accountId);
-              const startTime = new Date(event.start.dateTime);
-              const endTime = new Date(event.end.dateTime);
+              const startTime = safeParse(event.start.dateTime);
+              const endTime = safeParse(event.end.dateTime);
+              if (!startTime || !endTime) return null;
               const duration = (endTime - startTime) / (1000 * 60); // minutes
               
               return (
@@ -114,7 +116,7 @@ const DayView = ({
                   }}
                 >
                   <div className="day-event-time">
-                    {format(startTime, 'HH:mm')} - {format(endTime, 'HH:mm')}
+                    {safeFormat(startTime, 'HH:mm', '')} - {safeFormat(endTime, 'HH:mm', '')}
                   </div>
                   <div className="day-event-title">
                     {event.summary || event.title || 'Untitled Event'}

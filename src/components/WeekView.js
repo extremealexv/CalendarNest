@@ -1,5 +1,6 @@
 import React from 'react';
-import { format, startOfWeek, addDays, addHours, isSameDay, isToday } from 'date-fns';
+import { startOfWeek, addDays, addHours, isSameDay, isToday } from 'date-fns';
+import { safeFormat, safeParse } from '../utils/dateUtils';
 import './WeekView.css';
 
 const WeekView = ({ 
@@ -23,8 +24,8 @@ const WeekView = ({
           className={`week-header-day ${isSameDay(day, selectedDate) ? 'selected' : ''} ${isToday(day) ? 'today' : ''}`}
           onClick={() => onDateChange(day)}
         >
-          <div className="day-name">{format(day, 'EEE')}</div>
-          <div className="day-date">{format(day, 'd')}</div>
+          <div className="day-name">{safeFormat(day, 'EEE', '')}</div>
+          <div className="day-date">{safeFormat(day, 'd', '')}</div>
         </div>
       );
     }
@@ -55,7 +56,7 @@ const WeekView = ({
 
   const renderTimeSlots = () => {
     return hours.map(hour => {
-      const timeLabel = format(addHours(new Date().setHours(hour, 0, 0, 0), 0), 'HH:mm');
+    const timeLabel = safeFormat(addHours(new Date().setHours(hour, 0, 0, 0), 0), 'HH:mm', '');
       
       return (
         <div key={hour} className="week-time-row">
@@ -83,7 +84,7 @@ const WeekView = ({
                       title={`${event.summary || event.title} - ${event.accountName || 'Unknown'}`}
                     >
                       <div className="week-event-time">
-                        {event.start?.dateTime ? format(new Date(event.start.dateTime), 'HH:mm') : 'All day'}
+                        {event.start?.dateTime ? safeFormat(event.start.dateTime, 'HH:mm', 'All day') : 'All day'}
                       </div>
                       <div className="week-event-title">
                         {event.summary || event.title || 'Untitled Event'}

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
+import { safeFormat, safeParse } from '../utils/dateUtils';
 import './EventModal.css';
 
 const EventModal = ({
@@ -30,7 +31,7 @@ const EventModal = ({
   useEffect(() => {
     if (selectedTimeSlot && !editingEvent) {
       // New event from time slot click
-      const dateStr = format(selectedTimeSlot.date, 'yyyy-MM-dd');
+  const dateStr = safeFormat(selectedTimeSlot.date, 'yyyy-MM-dd', '');
       setEventData({
         title: '',
         description: '',
@@ -39,7 +40,7 @@ const EventModal = ({
         startTime: selectedTimeSlot.time || '09:00',
         endDate: dateStr,
         endTime: selectedTimeSlot.time ? 
-          format(new Date(`2000-01-01 ${selectedTimeSlot.time}`).getTime() + 60*60*1000, 'HH:mm') : 
+          safeFormat(new Date(`${'2000-01-01'} ${selectedTimeSlot.time}`), 'HH:mm', '10:00') :
           '10:00',
         isAllDay: false,
         accountId: accounts[0]?.id || '',
@@ -48,17 +49,17 @@ const EventModal = ({
       });
     } else if (editingEvent) {
       // Editing existing event
-      const startDate = new Date(editingEvent.start?.dateTime || editingEvent.start?.date);
-      const endDate = new Date(editingEvent.end?.dateTime || editingEvent.end?.date);
+  const startDate = safeParse(editingEvent.start?.dateTime || editingEvent.start?.date);
+  const endDate = safeParse(editingEvent.end?.dateTime || editingEvent.end?.date);
       
       setEventData({
         title: editingEvent.summary || editingEvent.title || '',
         description: editingEvent.description || '',
         location: editingEvent.location || '',
-        startDate: format(startDate, 'yyyy-MM-dd'),
-        startTime: editingEvent.start?.dateTime ? format(startDate, 'HH:mm') : '',
-        endDate: format(endDate, 'yyyy-MM-dd'),
-        endTime: editingEvent.end?.dateTime ? format(endDate, 'HH:mm') : '',
+  startDate: safeFormat(startDate, 'yyyy-MM-dd', ''),
+  startTime: editingEvent.start?.dateTime ? safeFormat(startDate, 'HH:mm', '') : '',
+  endDate: safeFormat(endDate, 'yyyy-MM-dd', ''),
+  endTime: editingEvent.end?.dateTime ? safeFormat(endDate, 'HH:mm', '') : '',
         isAllDay: !editingEvent.start?.dateTime,
         accountId: editingEvent.accountId || accounts[0]?.id || '',
         participants: editingEvent.participants || [],
