@@ -315,6 +315,13 @@
   color: #666;
 }
 
+.account-nickname {
+  font-size: 0.85rem;
+  color: #2b6cb0; /* subtle blue to stand out but fit theme */
+  font-weight: 600;
+  margin-top: 2px;
+}
+
 .add-account-btn.primary {
   width: 100%;
   justify-content: center;
