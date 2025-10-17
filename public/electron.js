@@ -275,6 +275,8 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
       // because the loopback server will receive the request. Still listen for
       // navigation events to detect direct redirects that match a configured
       // REACT_APP_GOOGLE_REDIRECT_URI (legacy fallback).
+      // Track whether the promise has been settled to avoid double resolve/reject
+      let settled = false;
       const handleNavigation = (newUrl) => {
         try {
           const parsed = new URL(newUrl);
@@ -283,9 +285,9 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
             const code = parsed.searchParams.get('code');
             const error = parsed.searchParams.get('error');
             if (code) {
-              resolve({ code });
+              if (!settled) { settled = true; resolve({ code }); }
             } else {
-              reject(new Error(error || 'No code in redirect'));
+              if (!settled) { settled = true; reject(new Error(error || 'No code in redirect')); }
             }
             try { authWindow.close(); } catch (e) {}
           }
@@ -303,7 +305,10 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
       });
 
       authWindow.on('closed', () => {
-        reject(new Error('Auth window closed'));
+        if (!settled) {
+          settled = true;
+          reject(new Error('Auth window closed'));
+        }
       });
     } catch (err) {
       reject(err);
@@ -335,15 +340,17 @@ ipcMain.handle('list-accounts', async () => {
 });
 
 // Exchange auth code for tokens in main process (avoids CORS)
-ipcMain.handle('exchange-auth-code', async (event, { code, codeVerifier }) => {
+ipcMain.handle('exchange-auth-code', async (event, { code, codeVerifier, redirectUri }) => {
   try {
     const tokenUrl = 'https://oauth2.googleapis.com/token';
     const params = new URLSearchParams();
-    params.append('client_id', process.env.REACT_APP_GOOGLE_CLIENT_ID || '');
+    params.append('client_id', process.env.REACT_APP_GOOGLE_CLIENT_ID || process.env.GOOGLE_CLIENT_ID || '');
+    const clientSecret = process.env.REACT_APP_GOOGLE_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET || '';
+    if (clientSecret) params.append('client_secret', clientSecret);
     params.append('code', code);
     params.append('code_verifier', codeVerifier || '');
     params.append('grant_type', 'authorization_code');
-    params.append('redirect_uri', process.env.REACT_APP_GOOGLE_REDIRECT_URI || '');
+    params.append('redirect_uri', redirectUri || process.env.REACT_APP_GOOGLE_REDIRECT_URI || '');
 
     const resp = await fetch(tokenUrl, {
       method: 'POST',

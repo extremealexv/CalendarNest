@@ -90,7 +90,10 @@ class GoogleCalendarService {
     if (!verifier) throw new Error('Missing PKCE code verifier');
 
     if (window.electronAPI && typeof window.electronAPI.exchangeCode === 'function') {
-    const result = await window.electronAPI.exchangeCode({ code, codeVerifier: verifier });
+      // Pass the redirectUri that was used by the loopback server so the
+      // token endpoint receives a matching redirect_uri parameter.
+      const redirectUri = sessionStorage.getItem('famsync_pkce_redirect') || '';
+      const result = await window.electronAPI.exchangeCode({ code, codeVerifier: verifier, redirectUri });
       if (!result || !result.success) throw new Error(result.error || 'exchange failed');
       return result.tokens;
     }
