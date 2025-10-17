@@ -146,6 +146,10 @@ const Header = ({
               </button>
             </div>
           </div>
+          {/* Quick add-account button visible outside the dropdown for touch/kiosk users */}
+          <button className="btn add-quick-btn" onClick={() => onAddAccount && onAddAccount()} title="Add account">
+            +
+          </button>
         </div>
       </div>
     </header>

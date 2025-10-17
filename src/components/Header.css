@@ -149,6 +149,24 @@
   position: relative;
 }
 
+.add-quick-btn {
+  margin-left: 10px;
+  background: #4CAF50;
+  color: white;
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  font-size: 1.2rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.add-quick-btn:hover {
+  background: #45a049;
+}
+
 .accounts-dropdown {
   position: relative;
 }
