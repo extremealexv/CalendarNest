@@ -9,7 +9,7 @@ import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
 
 // Import services
-import { GoogleCalendarService } from './services/GoogleCalendarService';
+import { googleCalendarService } from './services/GoogleCalendarService';
 import { authService } from './services/AuthService';
 
 function App() {
@@ -51,7 +51,7 @@ function App() {
       const allEvents = [];
       
       for (const account of authenticatedAccounts) {
-        const accountEvents = await GoogleCalendarService.getEvents(account.id, selectedDate);
+        const accountEvents = await googleCalendarService.getEvents(account.id, selectedDate);
         allEvents.push(...accountEvents);
       }
       
@@ -100,7 +100,7 @@ function App() {
 
   const handleEventCreate = async (eventData) => {
     try {
-      const newEvent = await GoogleCalendarService.createEvent(eventData);
+      const newEvent = await googleCalendarService.createEvent(eventData);
       setEvents([...events, newEvent]);
       return newEvent;
     } catch (error) {
