@@ -11,7 +11,18 @@
     "eject": "react-scripts eject",
     "electron": "electron .",
     "electron-dev": "concurrently \"npm start\" \"wait-on http://localhost:3000 && electron .\"",
+    "dist-linux": "electron-builder --linux AppImage --arm64",
     "lint": "eslint --ext .js,.jsx src/"
+  },
+  "author": "",
+  "build": {
+    "appId": "com.famsync.kiosk",
+    "productName": "FamSync Kiosk",
+    "linux": {
+      "target": ["AppImage"],
+      "category": "Office",
+      "icon": "build/icons"
+    }
   },
   "dependencies": {
     "react": "^18.2.0",
