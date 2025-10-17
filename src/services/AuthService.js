@@ -25,33 +25,34 @@ class AuthService {
   async startAuthentication(accountHint = '') {
     await this.initialize();
     try {
-      // Use loopback server flow: create server, open auth URL, wait for code
-  const { authUrl, serverId, codeVerifier, redirectUri } = await googleCalendarService.createAuthWithLoopback(accountHint);
+      // Use loopback server flow when running inside the Electron kiosk
+      if (window.electronAPI && typeof window.electronAPI.createLoopbackServer === 'function') {
+        const { authUrl, serverId, codeVerifier, redirectUri } = await googleCalendarService.createAuthWithLoopback(accountHint);
 
-      // Start waiting for the loopback server to receive the auth code
-      // and open the auth window without blocking the wait (openAuthWindow
-      // may itself try to detect redirects which doesn't work with dynamic
-      // loopback URIs). We deliberately don't await openAuthWindow here so
-      // the loopback server can accept the incoming request.
-      const waitPromise = (window.electronAPI && typeof window.electronAPI.waitForAuthCode === 'function')
-        ? window.electronAPI.waitForAuthCode(serverId)
-        : Promise.reject(new Error('No loopback API available'));
+        // Start waiting for the loopback server to receive the auth code
+        const waitPromise = (window.electronAPI && typeof window.electronAPI.waitForAuthCode === 'function')
+          ? window.electronAPI.waitForAuthCode(serverId)
+          : Promise.reject(new Error('No loopback API available'));
 
-      if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
-        // open a window pointing to the auth page but don't await it
-        // include serverId so the main process can attach and close the window
-        window.electronAPI.openAuthWindow({ authUrl, serverId }).catch(() => {});
-      } else {
-        window.open(authUrl, 'google-auth', 'width=600,height=700');
+        if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
+          window.electronAPI.openAuthWindow({ authUrl, serverId }).catch(() => {});
+        } else {
+          window.open(authUrl, 'google-auth', 'width=600,height=700');
+        }
+
+        const result = await waitPromise;
+        if (!result || !result.code) throw new Error('Authentication failed or timed out');
+
+        // Complete auth exchange
+        const account = await googleCalendarService.authenticateWithCode(result.code, codeVerifier, redirectUri);
+        return account;
       }
 
-      // Wait for the loopback server to receive the auth code
-  const result = await waitPromise;
-  if (!result || !result.code) throw new Error('Authentication failed or timed out');
-
-  // Complete auth exchange, pass codeVerifier and redirectUri returned by createAuthWithLoopback
-  const account = await googleCalendarService.authenticateWithCode(result.code, codeVerifier, redirectUri);
-      return account;
+      // Fallback for web (mobile browser) - redirect to web auth URL
+      const authUrl = await googleCalendarService.getAuthUrl(accountHint);
+      // Browser will follow the redirect and eventually return to the configured redirect URI
+      window.location.href = authUrl;
+      return;
     } catch (err) {
       console.error('startAuthentication error', err);
       throw err;

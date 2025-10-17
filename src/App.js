@@ -23,6 +23,26 @@ function App() {
 
   useEffect(() => {
     initializeApp();
+    // If running in a browser (not Electron) and redirected back with ?code=, complete auth
+    const params = new URLSearchParams(window.location.search);
+    const code = params.get('code');
+    if (code && !(window.electronAPI && typeof window.electronAPI.createLoopbackServer === 'function')) {
+      (async () => {
+        try {
+          // retrieve pkce verifier from sessionStorage
+          const verifier = sessionStorage.getItem('famsync_pkce_verifier');
+          const redirectUri = sessionStorage.getItem('famsync_pkce_redirect') || '';
+          const account = await googleCalendarService.authenticateWithCode(code, verifier, redirectUri);
+          handleAuthentication(account);
+          // clean URL
+          params.delete('code');
+          const newUrl = window.location.pathname + '?' + params.toString();
+          window.history.replaceState({}, '', newUrl);
+        } catch (err) {
+          console.error('Failed to complete web auth redirect:', err);
+        }
+      })();
+    }
   }, []);
 
   const initializeApp = async () => {

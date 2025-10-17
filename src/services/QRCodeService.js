@@ -43,7 +43,8 @@ class QRCodeService {
       return {
         qrCode: qrDataUrl,
         sessionId: authSessionId,
-        expires: authData.expires
+        expires: authData.expires,
+        authUrl: authData.authUrl
       };
     } catch (error) {
       console.error('Failed to generate QR code:', error);

@@ -33,7 +33,8 @@ const AuthScreen = ({ onAuthenticate }) => {
       setError('');
       // startAuthentication now completes the full flow and returns the account
       const account = await authService.startAuthentication();
-      onAuthenticate(account);
+      // In web flows, startAuthentication may redirect the browser and not return an account.
+      if (account) onAuthenticate(account);
     } catch (error) {
       console.error('Manual authentication failed:', error);
       setError(error.message || 'Authentication failed');

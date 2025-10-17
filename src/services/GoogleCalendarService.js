@@ -66,9 +66,34 @@ class GoogleCalendarService {
     const clientId = process.env.REACT_APP_GOOGLE_CLIENT_ID;
     if (!clientId) throw new Error('Missing Google client ID');
 
-    const { serverId, redirectUri } = await window.electronAPI.createLoopbackServer();
+    // If running inside Electron with preload APIs, create a loopback server.
+    if (window.electronAPI && typeof window.electronAPI.createLoopbackServer === 'function') {
+      const { serverId, redirectUri } = await window.electronAPI.createLoopbackServer();
+      const { codeVerifier, codeChallenge } = await this.generatePKCECodes();
+      sessionStorage.setItem('famsync_pkce_verifier', codeVerifier);
+
+      const params = new URLSearchParams({
+        client_id: clientId,
+        redirect_uri: redirectUri,
+        response_type: 'code',
+        scope: 'https://www.googleapis.com/auth/calendar https://www.googleapis.com/auth/calendar.events profile email',
+        access_type: 'offline',
+        prompt: 'consent',
+        code_challenge: codeChallenge,
+        code_challenge_method: 'S256',
+        login_hint: accountHint
+      });
+
+      const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
+      return { authUrl, serverId, codeVerifier, redirectUri };
+    }
+
+    // Web/browser fallback: build an auth URL that uses configured redirect URI.
+    const redirectUri = process.env.REACT_APP_GOOGLE_REDIRECT_URI || '';
     const { codeVerifier, codeChallenge } = await this.generatePKCECodes();
     sessionStorage.setItem('famsync_pkce_verifier', codeVerifier);
+    // Also save redirect URI for web flow completion
+    sessionStorage.setItem('famsync_pkce_redirect', redirectUri);
 
     const params = new URLSearchParams({
       client_id: clientId,
@@ -83,7 +108,7 @@ class GoogleCalendarService {
     });
 
     const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-    return { authUrl, serverId, codeVerifier, redirectUri };
+    return { authUrl, serverId: null, codeVerifier, redirectUri };
   }
 
   // Exchange code for tokens using PKCE
