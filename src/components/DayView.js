@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { addHours, isSameDay, isToday } from 'date-fns';
 import { safeFormat, safeParse } from '../utils/dateUtils';
 import './DayView.css';
+import { geminiService } from '../services/GeminiService';
 
 const DayView = ({ 
   events, 
@@ -11,6 +12,8 @@ const DayView = ({
   onEventClick, 
   accounts 
 }) => {
+  const [isSpeaking, setIsSpeaking] = useState(false);
+  const [assistantText, setAssistantText] = useState('');
   const hours = Array.from({ length: 24 }, (_, i) => i);
   
   const parsedSelected = safeParse(selectedDate) || new Date();
@@ -49,6 +52,64 @@ const DayView = ({
           <h2 className="day-name">{safeFormat(parsedSelected, 'EEEE', '')}</h2>
           <h3 className="day-date">{safeFormat(parsedSelected, 'MMMM d, yyyy', '')}</h3>
           {isToday(parsedSelected) && <span className="today-badge">Today</span>}
+        </div>
+        <div className="day-actions">
+          <button
+            className="gemini-read-btn"
+            onClick={async () => {
+              if (isSpeaking) return;
+              try {
+                // mark speaking
+                setIsSpeaking(true);
+                setAssistantText('');
+
+                // Ask Gemini to summarize today's events
+                const summary = await geminiService.generateAvailabilitySummary(
+                  accounts || [],
+                  dayEvents,
+                  parsedSelected,
+                  parsedSelected
+                );
+
+                const text = typeof summary === 'string' ? summary : String(summary);
+
+                // Try browser/electron TTS
+                if (typeof window !== 'undefined' && window.speechSynthesis) {
+                  try {
+                    const utter = new SpeechSynthesisUtterance(text);
+                    // small voice selection heuristic
+                    const voices = window.speechSynthesis.getVoices();
+                    if (voices && voices.length) utter.voice = voices[0];
+                    utter.onend = () => setIsSpeaking(false);
+                    utter.onerror = () => setIsSpeaking(false);
+                    window.speechSynthesis.speak(utter);
+                    setAssistantText(text);
+                  } catch (err) {
+                    // fallback: show text briefly
+                    setAssistantText(text);
+                    const words = text.split(/\s+/).length;
+                    const estMs = Math.max(3000, (words / 2) * 1000); // crude
+                    setTimeout(() => setIsSpeaking(false), estMs);
+                  }
+                } else {
+                  // No TTS available: show text bubble for a brief time
+                  setAssistantText(text);
+                  const words = text.split(/\s+/).length;
+                  const estMs = Math.max(3000, (words / 2) * 1000);
+                  setTimeout(() => setIsSpeaking(false), estMs);
+                }
+              } catch (err) {
+                console.warn('Gemini read failed', err);
+                setAssistantText('Sorry — I could not summarize today.');
+                setTimeout(() => setIsSpeaking(false), 3000);
+              }
+            }}
+            aria-pressed={isSpeaking}
+          >
+            🔊 Read today's events
+          </button>
+
+          <span className={`speaking-indicator ${isSpeaking ? 'speaking' : ''}`} title={isSpeaking ? 'Gemini is speaking' : 'Idle'} />
         </div>
       </div>
     );
@@ -149,6 +210,11 @@ const DayView = ({
   return (
     <div className="day-view">
       {renderHeader()}
+      {assistantText && (
+        <div className={`assistant-bubble ${isSpeaking ? 'visible' : ''}`}>
+          {assistantText}
+        </div>
+      )}
       {renderAllDayEvents()}
       <div className="day-schedule">
         {renderTimeSlots()}
