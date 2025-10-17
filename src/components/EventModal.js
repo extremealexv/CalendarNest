@@ -180,7 +180,7 @@ const EventModal = ({
               <option value="">Select account</option>
               {accounts.map(account => (
                 <option key={account.id} value={account.id}>
-                  {account.name} ({account.email})
+                  {account.name} ({account.nickname || account.email})
                 </option>
               ))}
             </select>
@@ -278,7 +278,7 @@ const EventModal = ({
                     }`}
                     onClick={() => toggleParticipant(account.id)}
                   >
-                    {account.name}
+                    {account.name} ({account.nickname || account.email})
                   </button>
                 ))}
               </div>

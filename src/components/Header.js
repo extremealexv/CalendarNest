@@ -10,8 +10,11 @@ const Header = ({
   onLogout, 
   selectedDate, 
   onDateChange,
-  onAddAccount
+  onAddAccount,
+  onSaveNickname
 }) => {
+  const [editingId, setEditingId] = React.useState(null);
+  const [editingValue, setEditingValue] = React.useState('');
   const handleDateNavigation = (direction) => {
   const newDate = safeParse(selectedDate) || new Date();
     
@@ -133,18 +136,63 @@ const Header = ({
                     />
                     <div className="account-details">
                       <span className="account-name">{account.name}</span>
-                      {account.nickname ? (
-                        <span className="account-nickname">{account.nickname}</span>
-                      ) : null}
-                      <span className="account-email">{account.email}</span>
+                      {editingId === account.id ? (
+                        <div className="nickname-edit">
+                          <input
+                            className="nickname-input"
+                            value={editingValue}
+                            onChange={(e) => setEditingValue(e.target.value)}
+                            placeholder="Nickname"
+                          />
+                          <div className="nickname-actions">
+                            <button
+                              className="btn btn-small"
+                              onClick={async () => {
+                                if (onSaveNickname) await onSaveNickname(account.id, editingValue);
+                                setEditingId(null);
+                              }}
+                            >
+                              Save
+                            </button>
+                            <button
+                              className="btn btn-small btn-secondary"
+                              onClick={() => {
+                                setEditingId(null);
+                                setEditingValue('');
+                              }}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      ) : (
+                        <>
+                          {account.nickname ? (
+                            <span className="account-nickname">{account.nickname}</span>
+                          ) : null}
+                          <span className="account-email">{account.email}</span>
+                        </>
+                      )}
                     </div>
                   </div>
-                  <button 
-                    className="btn btn-small btn-danger"
-                    onClick={() => onLogout(account.id)}
-                  >
-                    Remove
-                  </button>
+                  <div className="account-actions-right">
+                    <button 
+                      className="btn btn-small btn-outline"
+                      onClick={() => {
+                        setEditingId(account.id);
+                        setEditingValue(account.nickname || '');
+                      }}
+                      title="Edit nickname"
+                    >
+                      ✎
+                    </button>
+                    <button 
+                      className="btn btn-small btn-danger"
+                      onClick={() => onLogout(account.id)}
+                    >
+                      Remove
+                    </button>
+                  </div>
                 </div>
               ))}
               <div className="dropdown-divider"></div>

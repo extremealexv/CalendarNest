@@ -117,6 +117,20 @@ function App() {
     }
   };
 
+  const handleSaveNickname = async (accountId, nickname) => {
+    try {
+      setLoading(true);
+      await googleCalendarService.saveAccountMeta(accountId, { nickname });
+      // update local accounts state
+      const updated = accounts.map(acc => acc.id === accountId ? { ...acc, nickname } : acc);
+      setAccounts(updated);
+    } catch (err) {
+      console.error('Failed to save nickname', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleDateChange = (date) => {
     setSelectedDate(date);
     if (isAuthenticated && accounts.length > 0) {
@@ -156,6 +170,7 @@ function App() {
         onLogout={handleLogout}
         onViewChange={handleViewChange}
         onAddAccount={handleAddAccount}
+        onSaveNickname={handleSaveNickname}
         currentView={currentView}
         selectedDate={selectedDate}
         onDateChange={handleDateChange}

@@ -316,6 +316,43 @@
 }
 
 .account-nickname {
+  font-size: 0.9rem;
+  color: #0b66c3; /* subtle blue */
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.nickname-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.nickname-input {
+  padding: 8px 10px;
+  border-radius: 8px;
+  border: 1px solid rgba(0,0,0,0.12);
+  font-size: 0.95rem;
+  width: 220px;
+}
+
+.nickname-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.account-actions-right {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-outline {
+  background: transparent;
+  border: 1px solid rgba(0,0,0,0.08);
+}
+
+.account-nickname {
   font-size: 0.85rem;
   color: #2b6cb0; /* subtle blue to stand out but fit theme */
   font-weight: 600;
