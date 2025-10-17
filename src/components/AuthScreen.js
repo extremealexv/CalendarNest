@@ -31,10 +31,8 @@ const AuthScreen = ({ onAuthenticate }) => {
     try {
       setLoading(true);
       setError('');
-      
-      const code = await authService.startAuthentication();
-      const account = await authService.completeAuthentication(code);
-      
+      // startAuthentication now completes the full flow and returns the account
+      const account = await authService.startAuthentication();
       onAuthenticate(account);
     } catch (error) {
       console.error('Manual authentication failed:', error);
