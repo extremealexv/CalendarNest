@@ -628,18 +628,65 @@ ipcMain.handle('speak-text', async (event, { text }) => {
             writeLog('aplay fallback spawn error: ' + String(err));
             return settle({ success: false, error: String(err) });
           });
-          let stderr = '';
-          aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
-          aplay.on('close', (acode) => {
-            if (acode === 0) return settle({ success: true });
-            return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
-          });
-        }
-      });
+                  // Prefer pico2wave (more natural) if available, else use espeak with voice tweaks
+                  let engineUsed = 'espeak';
+                  try {
+                    const whichPico = spawnSync('which', ['pico2wave']);
+                    if (whichPico.status === 0) engineUsed = 'pico2wave';
+                  } catch (e) {
+                    engineUsed = 'espeak';
+                  }
 
-    } catch (err) {
-      try { fs.appendFileSync(path.join(app.getPath('userData'), 'tts.log'), new Date().toISOString() + ' speak-text internal: ' + String(err) + '\n', 'utf8'); } catch (e) {}
-      return resolve({ success: false, error: String(err) });
-    }
-  });
-});
+                  writeLog('TTS engine chosen: ' + engineUsed);
+
+                  let settled = false;
+                  const settle = (result) => {
+                    if (settled) return;
+                    settled = true;
+                    try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (e) { writeLog('tmp unlink failed: ' + String(e)); }
+                    writeLog('TTS end: ' + JSON.stringify(result));
+                    resolve(result);
+                  };
+
+                  if (engineUsed === 'pico2wave') {
+                    // pico2wave usage: pico2wave -w file.wav "text"
+                    const picoArgs = ['-w', tmpFile, sanitized];
+                    writeLog('pico2wave args: ' + JSON.stringify(picoArgs));
+                    const pico = spawn('pico2wave', picoArgs);
+                    pico.on('error', (err) => {
+                      writeLog('pico2wave spawn error: ' + String(err));
+                      // fallback to espeak
+                      engineUsed = 'espeak';
+                    });
+
+                    pico.on('close', (code) => {
+                      if (engineUsed !== 'pico2wave') return; // pico failed, we'll handle via fallback below
+                      if (code !== 0) {
+                        writeLog('pico2wave exited with code: ' + code);
+                        // fall through to espeak fallback
+                        engineUsed = 'espeak';
+                      } else {
+                        // proceed to play pico-generated file via sox or aplay (handled below by code continuation)
+                      }
+                    });
+                  }
+
+                  // If pico not used or pico failed, use espeak
+                  if (engineUsed === 'espeak') {
+                    const espeakArgs = ['-v', 'en-us+f3', '-s', '130', '-a', '160', '-w', tmpFile, sanitized];
+                    writeLog('espeak args: ' + JSON.stringify(espeakArgs));
+                    const espeak = spawn('espeak', espeakArgs);
+                    espeak.on('error', (err) => {
+                      writeLog('espeak spawn error: ' + String(err));
+                      return settle({ success: false, error: String(err) });
+                    });
+
+                    espeak.on('close', (code) => {
+                      if (code !== 0) {
+                        writeLog('espeak exited with code: ' + code);
+                        return settle({ success: false, error: 'espeak exited ' + code });
+                      }
+
+                      // At this point espeak produced the tmpFile; continue with sox/aplay handling below
+                    });
+                  }
