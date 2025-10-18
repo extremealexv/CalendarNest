@@ -577,42 +577,64 @@ ipcMain.handle('speak-text', async (event, { text }) => {
         const normFile = tmpFile.replace('.wav', '_norm.wav');
         const soxArgs = [tmpFile, '-r', '44100', '-c', '2', normFile, 'norm'];
         writeLog('sox args: ' + JSON.stringify(soxArgs));
-        const sox = spawn('sox', soxArgs);
+        let attemptedSox = true;
+        try {
+          const sox = spawn('sox', soxArgs);
 
-        sox.on('error', (err) => {
-          writeLog('sox spawn error: ' + String(err));
-          return settle({ success: false, error: String(err) });
-        });
-
-        sox.stderr.on('data', d => writeLog('sox stderr: ' + d.toString()));
-
-        sox.on('close', (scode) => {
-          if (scode !== 0) {
-            writeLog('sox exited with code: ' + scode);
-            return settle({ success: false, error: 'sox exited ' + scode });
-          }
-
-          // Play the normalized file
-          const aplayArgs = ['-q', '-f', 'S16_LE', '-r', '44100', '-c', '2', '-D', device, normFile];
-          writeLog('aplay args: ' + JSON.stringify(aplayArgs));
-          const aplay = spawn('aplay', aplayArgs);
-
-          aplay.on('error', (err) => {
-            writeLog('aplay spawn error: ' + String(err));
-            return settle({ success: false, error: String(err) });
+          sox.on('error', (err) => {
+            writeLog('sox spawn error: ' + String(err));
+            attemptedSox = false;
           });
 
+          sox.stderr.on('data', d => writeLog('sox stderr: ' + d.toString()));
+
+          sox.on('close', (scode) => {
+            if (scode !== 0) {
+              writeLog('sox exited with code: ' + scode);
+              attemptedSox = false;
+            }
+
+            const playFile = attemptedSox ? normFile : tmpFile;
+            if (!attemptedSox) writeLog('sox not available or failed, falling back to raw espeak WAV. To enable normalization install sox: sudo apt-get install sox libsox-fmt-all');
+
+            // Play the (normalized or raw) file
+            const aplayArgs = ['-q', '-f', 'S16_LE', '-r', attemptedSox ? '44100' : '22050', '-c', attemptedSox ? '2' : '1', '-D', device, playFile];
+            writeLog('aplay args: ' + JSON.stringify(aplayArgs));
+            const aplay = spawn('aplay', aplayArgs);
+
+            aplay.on('error', (err) => {
+              writeLog('aplay spawn error: ' + String(err));
+              return settle({ success: false, error: String(err) });
+            });
+
+            let stderr = '';
+            aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
+
+            aplay.on('close', (acode) => {
+              if (acode === 0) return settle({ success: true });
+              return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
+            });
+
+            // Timeout for playback
+            const timeoutHandle = setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
+          });
+        } catch (err) {
+          writeLog('sox handling exception: ' + String(err));
+          // Fallback: play raw file
+          const aplayArgs = ['-q', '-f', 'S16_LE', '-r', '22050', '-c', '1', '-D', device, tmpFile];
+          writeLog('aplay fallback args: ' + JSON.stringify(aplayArgs));
+          const aplay = spawn('aplay', aplayArgs);
+          aplay.on('error', (err) => {
+            writeLog('aplay fallback spawn error: ' + String(err));
+            return settle({ success: false, error: String(err) });
+          });
           let stderr = '';
           aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
-
           aplay.on('close', (acode) => {
             if (acode === 0) return settle({ success: true });
             return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
           });
-
-          // Timeout for playback
-          const timeoutHandle = setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
-        });
+        }
       });
 
     } catch (err) {
