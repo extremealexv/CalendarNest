@@ -23,7 +23,7 @@ class GeminiService {
     try {
       this.genAI = new GoogleGenerativeAI(apiKey);
       this.model = this.genAI.getGenerativeModel({ 
-        model: process.env.REACT_APP_GEMINI_MODEL || 'gemini-1.5-flash' 
+        model: process.env.REACT_APP_GEMINI_MODEL || 'gemini-2.5-flash' 
       });
       this.isInitialized = true;
       return true;
