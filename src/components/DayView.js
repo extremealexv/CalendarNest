@@ -71,7 +71,9 @@ const DayView = ({
                   parsedSelected
                 );
 
-                const text = typeof summary === 'string' ? summary : String(summary);
+                const rawText = typeof summary === 'string' ? summary : String(summary);
+                // Remove markdown-like asterisks and collapse whitespace so TTS doesn't read '*' characters
+                const text = rawText.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 
                 // Try browser/electron TTS first, then fall back to main-process espeak via preload
                 setAssistantText(text);

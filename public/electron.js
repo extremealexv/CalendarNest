@@ -515,86 +515,74 @@ ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
 
 // TTS: speak-text handler uses espeak and aplay to ensure audio on headless kiosks
 ipcMain.handle('speak-text', async (event, { text }) => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     try {
       if (!text) return resolve({ success: false, error: 'No text provided' });
 
-      // Try to detect HDMI/physical sinks via pactl (PulseAudio). If PulseAudio isn't available,
-      // fall back to using default ALSA device via aplay. We spawn a short shell pipeline:
-      // espeak "text" --stdout | aplay -D <device>
-      const { spawn } = require('child_process');
+      // Sanitize text: strip asterisks and collapse whitespace
+      const sanitized = ('' + text).replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 
-      // Helper to run pactl and parse sinks
-      const detectPulseHDMI = () => {
-        return new Promise((res) => {
-          const pactl = spawn('pactl', ['list', 'short', 'sinks']);
-          let out = '';
-          let err = '';
-          pactl.stdout.on('data', d => out += d.toString());
-          pactl.stderr.on('data', d => err += d.toString());
-          pactl.on('close', (code) => {
-            if (code !== 0) return res(null);
-            try {
-              const lines = out.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-              for (const line of lines) {
-                // Format: index\tname\tmodule\tsample\tstate
-                const parts = line.split(/\s+/);
-                if (parts.length >= 2) {
-                  const name = parts[1];
-                  if (name.toLowerCase().includes('hdmi') || name.toLowerCase().includes('ahubhdmi') || name.toLowerCase().includes('hdmi-sink')) {
-                    return res(name);
-                  }
-                }
-              }
-            } catch (e) {
-              // ignore
-            }
-            return res(null);
-          });
-        });
+      const logPath = path.join(app.getPath('userData'), 'tts.log');
+      const writeLog = (msg) => {
+        try { fs.appendFileSync(logPath, new Date().toISOString() + ' ' + msg + '\n', 'utf8'); } catch (e) {}
       };
 
-      (async () => {
-        let device = null;
-        try {
-          device = await detectPulseHDMI();
-        } catch (e) {
-          device = null;
-        }
+      writeLog('TTS start: ' + sanitized.slice(0, 500));
 
-        // Build pipeline: espeak -> aplay. If pactl found an external sink name, use aplay -D <sink>
-        // Otherwise, rely on default aplay device.
-        const espeakArgs = ['--stdout', text];
-        const espeak = spawn('espeak', espeakArgs);
+      const { spawn } = require('child_process');
 
-        const aplayArgs = [];
-        if (device) {
-          // For PulseAudio sink names we pass the sink name to aplay (-D). Some systems expect "pulse" or "plughw:0,0".
-          // aplay can accept "plughw:X,Y". We'll attempt to use the PulseAudio "sink" name directly with aplay -D.
-          aplayArgs.push('-D', device);
-        }
+      // Hardcode ALSA HDMI device (card 2)
+      const device = 'plughw:2,0';
 
-        const aplay = spawn('aplay', aplayArgs);
+      const espeak = spawn('espeak', ['--stdout', sanitized]);
+      const aplay = spawn('aplay', ['-D', device]);
 
+      let settled = false;
+      const settle = (result) => {
+        if (settled) return;
+        settled = true;
+        try { if (!espeak.killed) espeak.kill(); } catch (e) {}
+        try { if (!aplay.killed) aplay.kill(); } catch (e) {}
+        writeLog('TTS end: ' + JSON.stringify(result));
+        resolve(result);
+      };
+
+      espeak.on('error', (err) => {
+        writeLog('espeak error: ' + String(err));
+        settle({ success: false, error: String(err) });
+      });
+
+      aplay.on('error', (err) => {
+        writeLog('aplay error: ' + String(err));
+        settle({ success: false, error: String(err) });
+      });
+
+      espeak.stdout.on('error', (err) => {
+        writeLog('espeak stdout error (ignored): ' + String(err));
+      });
+      aplay.stdin.on('error', (err) => {
+        writeLog('aplay stdin error (ignored): ' + String(err));
+      });
+
+      aplay.stderr.on('data', d => writeLog('aplay stderr: ' + d.toString()));
+
+      aplay.on('close', (code) => {
+        if (code === 0) return settle({ success: true });
+        return settle({ success: false, error: 'aplay exited with code ' + code });
+      });
+
+      try {
         espeak.stdout.pipe(aplay.stdin);
+      } catch (pipeErr) {
+        writeLog('Pipe failed: ' + String(pipeErr));
+      }
 
-        let stderr = '';
-        aplay.stderr.on('data', d => stderr += d.toString());
-        aplay.on('close', (code) => {
-          if (code === 0) return resolve({ success: true });
-          return reject(new Error('aplay exited with code ' + code + ' stderr: ' + stderr));
-        });
+      // Safety timeout: resolve after 30s if processes hang
+      setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, 30 * 1000);
 
-        // Safety timeout: resolve after 30s if process hangs
-        setTimeout(() => {
-          try { espeak.kill(); } catch (e) {}
-          try { aplay.kill(); } catch (e) {}
-          resolve({ success: true, timeout: true });
-        }, 30 * 1000);
-      })();
     } catch (err) {
-      console.error('speak-text failed', err);
-      return reject(err);
+      try { fs.appendFileSync(path.join(app.getPath('userData'), 'tts.log'), new Date().toISOString() + ' speak-text internal: ' + String(err) + '\n', 'utf8'); } catch (e) {}
+      return resolve({ success: false, error: String(err) });
     }
   });
 });
