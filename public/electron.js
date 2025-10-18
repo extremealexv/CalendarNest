@@ -532,59 +532,68 @@ ipcMain.handle('speak-text', async (event, { text }) => {
         try { fs.appendFileSync(tmpLogPath, line, 'utf8'); } catch (e) { /* ignore */ }
       };
 
-      writeLog('TTS start: ' + sanitized.slice(0, 500));
+  writeLog('TTS start: ' + sanitized.slice(0, 500));
+
+  // Estimate duration from word count to avoid cutting speech mid-stream
+  const wordCount = sanitized.split(/\s+/).filter(Boolean).length;
+  // Typical speech ~150 wpm => 2.5 words/sec
+  const estimatedMs = Math.ceil((wordCount / 2.5) * 1000);
+  // Add safety margin and cap between 5s and 2 minutes
+  const timeoutMs = Math.min(Math.max(estimatedMs + 3000, 5000), 2 * 60 * 1000);
+  writeLog('TTS words=' + wordCount + ' estimatedMs=' + estimatedMs + ' timeoutMs=' + timeoutMs);
 
       const { spawn } = require('child_process');
 
       // Hardcode ALSA HDMI device (card 2)
       const device = 'plughw:2,0';
 
-      const espeak = spawn('espeak', ['--stdout', sanitized]);
-  // Use 16-bit little-endian, 22050Hz, mono to match espeak's output and avoid resampling artifacts
-  const aplay = spawn('aplay', ['-f', 'S16_LE', '-r', '22050', '-c', '1', '-D', device]);
+      // Write WAV to a temp file with espeak, then play it with aplay to avoid pipe-related EPIPE
+      const tmpFile = path.join('/tmp', `famsync_tts_${Date.now()}.wav`);
+      const espeakArgs = ['-s', '140', '-a', '160', '-w', tmpFile, sanitized];
+      writeLog('espeak args: ' + JSON.stringify(espeakArgs));
 
       let settled = false;
       const settle = (result) => {
         if (settled) return;
         settled = true;
-        try { if (!espeak.killed) espeak.kill(); } catch (e) {}
-        try { if (!aplay.killed) aplay.kill(); } catch (e) {}
+        try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (e) { writeLog('tmp unlink failed: ' + String(e)); }
         writeLog('TTS end: ' + JSON.stringify(result));
         resolve(result);
       };
 
+      const espeak = spawn('espeak', espeakArgs);
       espeak.on('error', (err) => {
-        writeLog('espeak error: ' + String(err));
-        settle({ success: false, error: String(err) });
+        writeLog('espeak spawn error: ' + String(err));
+        return settle({ success: false, error: String(err) });
       });
 
-      aplay.on('error', (err) => {
-        writeLog('aplay error: ' + String(err));
-        settle({ success: false, error: String(err) });
+      espeak.on('close', (code) => {
+        if (code !== 0) {
+          writeLog('espeak exited with code: ' + code);
+          return settle({ success: false, error: 'espeak exited ' + code });
+        }
+
+        // Play the generated file
+        const aplayArgs = ['-q', '-f', 'S16_LE', '-r', '22050', '-c', '1', '-D', device, tmpFile];
+        writeLog('aplay args: ' + JSON.stringify(aplayArgs));
+        const aplay = spawn('aplay', aplayArgs);
+
+        aplay.on('error', (err) => {
+          writeLog('aplay spawn error: ' + String(err));
+          return settle({ success: false, error: String(err) });
+        });
+
+        let stderr = '';
+        aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
+
+        aplay.on('close', (acode) => {
+          if (acode === 0) return settle({ success: true });
+          return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
+        });
+
+        // Timeout for playback
+        const timeoutHandle = setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
       });
-
-      espeak.stdout.on('error', (err) => {
-        writeLog('espeak stdout error (ignored): ' + String(err));
-      });
-      aplay.stdin.on('error', (err) => {
-        writeLog('aplay stdin error (ignored): ' + String(err));
-      });
-
-      aplay.stderr.on('data', d => writeLog('aplay stderr: ' + d.toString()));
-
-      aplay.on('close', (code) => {
-        if (code === 0) return settle({ success: true });
-        return settle({ success: false, error: 'aplay exited with code ' + code });
-      });
-
-      try {
-        espeak.stdout.pipe(aplay.stdin);
-      } catch (pipeErr) {
-        writeLog('Pipe failed: ' + String(pipeErr));
-      }
-
-      // Safety timeout: resolve after 30s if processes hang
-      setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, 30 * 1000);
 
     } catch (err) {
       try { fs.appendFileSync(path.join(app.getPath('userData'), 'tts.log'), new Date().toISOString() + ' speak-text internal: ' + String(err) + '\n', 'utf8'); } catch (e) {}
