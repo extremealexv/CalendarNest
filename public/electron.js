@@ -573,26 +573,46 @@ ipcMain.handle('speak-text', async (event, { text }) => {
           return settle({ success: false, error: 'espeak exited ' + code });
         }
 
-        // Play the generated file
-        const aplayArgs = ['-q', '-f', 'S16_LE', '-r', '22050', '-c', '1', '-D', device, tmpFile];
-        writeLog('aplay args: ' + JSON.stringify(aplayArgs));
-        const aplay = spawn('aplay', aplayArgs);
+        // Normalize and resample using sox to a new temp file, then play that file
+        const normFile = tmpFile.replace('.wav', '_norm.wav');
+        const soxArgs = [tmpFile, '-r', '44100', '-c', '2', normFile, 'norm'];
+        writeLog('sox args: ' + JSON.stringify(soxArgs));
+        const sox = spawn('sox', soxArgs);
 
-        aplay.on('error', (err) => {
-          writeLog('aplay spawn error: ' + String(err));
+        sox.on('error', (err) => {
+          writeLog('sox spawn error: ' + String(err));
           return settle({ success: false, error: String(err) });
         });
 
-        let stderr = '';
-        aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
+        sox.stderr.on('data', d => writeLog('sox stderr: ' + d.toString()));
 
-        aplay.on('close', (acode) => {
-          if (acode === 0) return settle({ success: true });
-          return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
+        sox.on('close', (scode) => {
+          if (scode !== 0) {
+            writeLog('sox exited with code: ' + scode);
+            return settle({ success: false, error: 'sox exited ' + scode });
+          }
+
+          // Play the normalized file
+          const aplayArgs = ['-q', '-f', 'S16_LE', '-r', '44100', '-c', '2', '-D', device, normFile];
+          writeLog('aplay args: ' + JSON.stringify(aplayArgs));
+          const aplay = spawn('aplay', aplayArgs);
+
+          aplay.on('error', (err) => {
+            writeLog('aplay spawn error: ' + String(err));
+            return settle({ success: false, error: String(err) });
+          });
+
+          let stderr = '';
+          aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
+
+          aplay.on('close', (acode) => {
+            if (acode === 0) return settle({ success: true });
+            return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
+          });
+
+          // Timeout for playback
+          const timeoutHandle = setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
         });
-
-        // Timeout for playback
-        const timeoutHandle = setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
       });
 
     } catch (err) {
