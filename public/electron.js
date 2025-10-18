@@ -523,8 +523,13 @@ ipcMain.handle('speak-text', async (event, { text }) => {
       const sanitized = ('' + text).replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 
       const logPath = path.join(app.getPath('userData'), 'tts.log');
+      const tmpLogPath = '/tmp/famsync-tts.log';
+      // Informative console output so it's easy to find the logs when running the app
+      try { console.log('TTS logs will be written to:', logPath, 'and', tmpLogPath); } catch (e) {}
       const writeLog = (msg) => {
-        try { fs.appendFileSync(logPath, new Date().toISOString() + ' ' + msg + '\n', 'utf8'); } catch (e) {}
+        const line = new Date().toISOString() + ' ' + msg + '\n';
+        try { fs.appendFileSync(logPath, line, 'utf8'); } catch (e) { /* ignore */ }
+        try { fs.appendFileSync(tmpLogPath, line, 'utf8'); } catch (e) { /* ignore */ }
       };
 
       writeLog('TTS start: ' + sanitized.slice(0, 500));
@@ -535,7 +540,8 @@ ipcMain.handle('speak-text', async (event, { text }) => {
       const device = 'plughw:2,0';
 
       const espeak = spawn('espeak', ['--stdout', sanitized]);
-      const aplay = spawn('aplay', ['-D', device]);
+  // Use 16-bit little-endian, 22050Hz, mono to match espeak's output and avoid resampling artifacts
+  const aplay = spawn('aplay', ['-f', 'S16_LE', '-r', '22050', '-c', '1', '-D', device]);
 
       let settled = false;
       const settle = (result) => {
