@@ -513,7 +513,7 @@ ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
   }
 });
 // TTS: speak-text handler uses espeak/pico2wave + sox (optional) + aplay to provide reliable audio
-ipcMain.handle('speak-text', async (event, { text }) => {
+ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
   return new Promise((resolve) => {
     try {
       if (!text) return resolve({ success: false, error: 'No text provided' });
@@ -543,10 +543,10 @@ ipcMain.handle('speak-text', async (event, { text }) => {
       const tmpFile = path.join('/tmp', `famsync_tts_${Date.now()}.wav`);
       const normFile = tmpFile.replace('.wav', '_norm.wav');
 
-      // Choose engine: prefer pico2wave
-      let engineUsed = 'espeak';
-      try { const whichPico = spawnSync('which', ['pico2wave']); if (whichPico.status === 0) engineUsed = 'pico2wave'; } catch (e) { engineUsed = 'espeak'; }
-      writeLog('TTS engine chosen: ' + engineUsed);
+  // Choose engine: prefer pico2wave
+  let engineUsed = 'espeak';
+  try { const whichPico = spawnSync('which', ['pico2wave']); if (whichPico.status === 0) engineUsed = 'pico2wave'; } catch (e) { engineUsed = 'espeak'; }
+  writeLog('TTS engine chosen: ' + engineUsed + ' lang=' + lang);
 
       let settled = false;
       const settle = (result) => {
@@ -597,7 +597,11 @@ ipcMain.handle('speak-text', async (event, { text }) => {
           pico.on('error', (err) => { writeLog('pico2wave spawn error: ' + String(err)); engineUsed = 'espeak'; generate(); });
           pico.on('close', (code) => { if (code !== 0) { writeLog('pico2wave exited with code: ' + code); engineUsed = 'espeak'; generate(); return; } playback(); });
         } else {
-          const espeakArgs = ['-v', 'en-us+f3', '-s', '130', '-a', '160', '-w', tmpFile, sanitized];
+          // Tune espeak voice per language
+          const isRussian = ('' + lang).toLowerCase().startsWith('ru');
+          const espeakArgs = isRussian
+            ? ['-v', 'ru', '-s', '120', '-a', '160', '-w', tmpFile, sanitized]
+            : ['-v', 'en-us+f3', '-s', '130', '-a', '160', '-w', tmpFile, sanitized];
           writeLog('espeak args: ' + JSON.stringify(espeakArgs));
           const espeak = spawn('espeak', espeakArgs);
           espeak.on('error', (err) => { writeLog('espeak spawn error: ' + String(err)); return settle({ success: false, error: String(err) }); });

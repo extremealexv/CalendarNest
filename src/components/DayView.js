@@ -14,6 +14,7 @@ const DayView = ({
 }) => {
   const [isSpeaking, setIsSpeaking] = useState(false);
   const [assistantText, setAssistantText] = useState('');
+  const [assistantLang, setAssistantLang] = useState('en');
   const hours = Array.from({ length: 24 }, (_, i) => i);
   
   const parsedSelected = safeParse(selectedDate) || new Date();
@@ -54,6 +55,14 @@ const DayView = ({
           {isToday(parsedSelected) && <span className="today-badge">Today</span>}
         </div>
         <div className="day-actions">
+          <div className="lang-select-wrapper">
+            <label htmlFor="assistant-lang" className="lang-label">Assistant:</label>
+            <select id="assistant-lang" value={assistantLang} onChange={(e) => setAssistantLang(e.target.value)}>
+              <option value="en">English</option>
+              <option value="ru">Русский</option>
+            </select>
+          </div>
+
           <button
             className="gemini-read-btn"
             onClick={async () => {
@@ -63,12 +72,13 @@ const DayView = ({
                 setIsSpeaking(true);
                 setAssistantText('');
 
-                // Ask Gemini to summarize today's events
+                // Ask Gemini to summarize today's events (pass language)
                 const summary = await geminiService.generateAvailabilitySummary(
                   accounts || [],
                   dayEvents,
                   parsedSelected,
-                  parsedSelected
+                  parsedSelected,
+                  { lang: assistantLang }
                 );
 
                 const rawText = typeof summary === 'string' ? summary : String(summary);
@@ -85,16 +95,16 @@ const DayView = ({
                     if (voices && voices.length) utter.voice = voices[0];
                     utter.onend = () => { setIsSpeaking(false); handled = true; };
                     utter.onerror = async () => {
-                      // try main process fallback
-                      try {
-                        if (window.electronAPI && window.electronAPI.speakText) {
-                          await window.electronAPI.speakText(text);
+                      // try main process fallback (pass language)
+                        try {
+                          if (window.electronAPI && window.electronAPI.speakText) {
+                            await window.electronAPI.speakText(text, assistantLang);
+                          }
+                        } catch (ex) {
+                          console.warn('Main-process TTS failed', ex);
+                        } finally {
+                          setIsSpeaking(false);
                         }
-                      } catch (ex) {
-                        console.warn('Main-process TTS failed', ex);
-                      } finally {
-                        setIsSpeaking(false);
-                      }
                     };
                     window.speechSynthesis.speak(utter);
                     handled = true;
@@ -107,7 +117,7 @@ const DayView = ({
                   // No Web Speech available or it failed synchronously — use main-process TTS if available
                   try {
                     if (window.electronAPI && window.electronAPI.speakText) {
-                      await window.electronAPI.speakText(text);
+                      await window.electronAPI.speakText(text, assistantLang);
                     } else {
                       // final fallback: display text for estimated duration
                       const words = text.split(/\s+/).length;

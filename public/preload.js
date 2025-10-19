@@ -15,5 +15,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ,
   refreshAuthToken: (payload) => ipcRenderer.invoke('refresh-auth-token', payload)
   ,
-  speakText: (text) => ipcRenderer.invoke('speak-text', { text })
+  // speakText accepts (text, lang) where lang is a BCP-47 like 'en' or 'ru'
+  speakText: (text, lang = 'en') => ipcRenderer.invoke('speak-text', { text, lang })
 });

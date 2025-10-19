@@ -34,7 +34,7 @@ class GeminiService {
   }
 
   // Parse natural language into structured event data
-  async parseEventFromText(text, accounts = [], currentDate = new Date()) {
+  async parseEventFromText(text, accounts = [], currentDate = new Date(), options = {}) {
     if (!this.initialize()) {
       throw new Error('Gemini AI not available');
     }
@@ -43,7 +43,11 @@ class GeminiService {
       const accountsList = accounts.map(acc => `${acc.name} (${acc.email})`).join(', ');
   const currentDateStr = safeFormat(currentDate, 'yyyy-MM-dd EEEE', safeFormat(new Date(), 'yyyy-MM-dd EEEE', ''));
 
+      const lang = (options.lang || 'en').toLowerCase();
+      const languageInstruction = lang.startsWith('ru') ? 'Respond in Russian.' : 'Respond in English.';
+
       const prompt = `
+${languageInstruction}
 Parse the following text into a structured calendar event. Today is ${currentDateStr}.
 
 Available accounts: ${accountsList}
@@ -101,12 +105,14 @@ Only return the JSON object, no other text.
   }
 
   // Generate availability summary for multiple accounts
-  async generateAvailabilitySummary(accounts, events, startDate, endDate) {
+  async generateAvailabilitySummary(accounts, events, startDate, endDate, options = {}) {
     if (!this.initialize()) {
       throw new Error('Gemini AI not available');
     }
 
     try {
+  const lang = (options.lang || 'en').toLowerCase();
+  const languageInstruction = lang.startsWith('ru') ? 'Please write the summary in Russian.' : 'Please write the summary in English.';
   const dateRange = `${safeFormat(startDate, 'MMM d', '')} - ${safeFormat(endDate, 'MMM d, yyyy', '')}`;
       
       // Prepare events data for analysis
@@ -118,6 +124,7 @@ Only return the JSON object, no other text.
       }));
 
       const prompt = `
+${languageInstruction}
 Analyze the following calendar data and provide a natural language summary of availability and conflicts for the family.
 
 Date Range: ${dateRange}
@@ -136,13 +143,13 @@ Provide a conversational summary including:
 Keep the response friendly and family-focused, under 200 words.
 `;
 
-      const result = await this.model.generateContent(prompt);
-      const response = await result.response;
-      return response.text();
+  const result = await this.model.generateContent(prompt);
+  const response = await result.response;
+  return response.text();
       
     } catch (error) {
       console.error('Availability summary generation failed:', error);
-      // Fallback: produce a simple local summary when Gemini model/method isn't available
+  // Fallback: produce a simple local summary when Gemini model/method isn't available
       try {
         // Aggregate events per account
         const counts = {};
@@ -183,10 +190,17 @@ Keep the response friendly and family-focused, under 200 words.
         });
 
         const summaryParts = [];
-        summaryParts.push(`Busiest calendar: ${busiest}`);
-        if (best.length) summaryParts.push(`Good meeting times: ${best.join(', ')}`);
-        summaryParts.push(`${(events || []).length} events in the selected range.`);
-        summaryParts.push(weekendEvents.length ? `There are ${weekendEvents.length} weekend events.` : 'Weekend looks mostly free.');
+        if (lang && lang.startsWith('ru')) {
+          summaryParts.push(`Самая занятая запись: ${busiest}`);
+          if (best.length) summaryParts.push(`Подходящее время для встреч: ${best.join(', ')}`);
+          summaryParts.push(`Всего событий: ${(events || []).length}`);
+          summaryParts.push(weekendEvents.length ? `Есть ${weekendEvents.length} событий в выходные.` : 'Выходные в основном свободны.');
+        } else {
+          summaryParts.push(`Busiest calendar: ${busiest}`);
+          if (best.length) summaryParts.push(`Good meeting times: ${best.join(', ')}`);
+          summaryParts.push(`${(events || []).length} events in the selected range.`);
+          summaryParts.push(weekendEvents.length ? `There are ${weekendEvents.length} weekend events.` : 'Weekend looks mostly free.');
+        }
 
         return summaryParts.join(' ');
       } catch (fallbackErr) {
