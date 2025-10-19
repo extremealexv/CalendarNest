@@ -506,14 +506,7 @@ ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
       throw new Error(JSON.stringify(json));
     }
 
-    return { success: true, tokens: json };
-  } catch (err) {
-    console.error('refresh-auth-token failed', err);
-    return { success: false, error: String(err) };
-  }
-});
-
-// TTS: speak-text handler uses espeak and aplay to ensure audio on headless kiosks
+// TTS: speak-text handler uses espeak/pico2wave + sox (optional) + aplay to provide reliable audio
 ipcMain.handle('speak-text', async (event, { text }) => {
   return new Promise((resolve) => {
     try {
@@ -524,7 +517,6 @@ ipcMain.handle('speak-text', async (event, { text }) => {
 
       const logPath = path.join(app.getPath('userData'), 'tts.log');
       const tmpLogPath = '/tmp/famsync-tts.log';
-      // Informative console output so it's easy to find the logs when running the app
       try { console.log('TTS logs will be written to:', logPath, 'and', tmpLogPath); } catch (e) {}
       const writeLog = (msg) => {
         const line = new Date().toISOString() + ' ' + msg + '\n';
@@ -532,104 +524,88 @@ ipcMain.handle('speak-text', async (event, { text }) => {
         try { fs.appendFileSync(tmpLogPath, line, 'utf8'); } catch (e) { /* ignore */ }
       };
 
-  writeLog('TTS start: ' + sanitized.slice(0, 500));
+      writeLog('TTS start: ' + sanitized.slice(0, 500));
 
-  // Estimate duration from word count to avoid cutting speech mid-stream
-  const wordCount = sanitized.split(/\s+/).filter(Boolean).length;
-  // Typical speech ~150 wpm => 2.5 words/sec
-  const estimatedMs = Math.ceil((wordCount / 2.5) * 1000);
-  // Add safety margin and cap between 5s and 2 minutes
-  const timeoutMs = Math.min(Math.max(estimatedMs + 3000, 5000), 2 * 60 * 1000);
-  writeLog('TTS words=' + wordCount + ' estimatedMs=' + estimatedMs + ' timeoutMs=' + timeoutMs);
+      // Estimate duration
+      const wordCount = sanitized.split(/\s+/).filter(Boolean).length;
+      const estimatedMs = Math.ceil((wordCount / 2.5) * 1000);
+      const timeoutMs = Math.min(Math.max(estimatedMs + 3000, 5000), 2 * 60 * 1000);
+      writeLog('TTS words=' + wordCount + ' estimatedMs=' + estimatedMs + ' timeoutMs=' + timeoutMs);
 
-      const { spawn } = require('child_process');
-
-      // Hardcode ALSA HDMI device (card 2)
+      const { spawn, spawnSync } = require('child_process');
       const device = 'plughw:2,0';
-
-      // Write WAV to a temp file with espeak, then play it with aplay to avoid pipe-related EPIPE
       const tmpFile = path.join('/tmp', `famsync_tts_${Date.now()}.wav`);
-      const espeakArgs = ['-s', '140', '-a', '160', '-w', tmpFile, sanitized];
-      writeLog('espeak args: ' + JSON.stringify(espeakArgs));
+      const normFile = tmpFile.replace('.wav', '_norm.wav');
+
+      // Choose engine: prefer pico2wave
+      let engineUsed = 'espeak';
+      try { const whichPico = spawnSync('which', ['pico2wave']); if (whichPico.status === 0) engineUsed = 'pico2wave'; } catch (e) { engineUsed = 'espeak'; }
+      writeLog('TTS engine chosen: ' + engineUsed);
 
       let settled = false;
       const settle = (result) => {
         if (settled) return;
         settled = true;
         try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (e) { writeLog('tmp unlink failed: ' + String(e)); }
+        try { if (fs.existsSync(normFile)) fs.unlinkSync(normFile); } catch (e) { /* ignore */ }
         writeLog('TTS end: ' + JSON.stringify(result));
         resolve(result);
       };
 
-      const espeak = spawn('espeak', espeakArgs);
-      espeak.on('error', (err) => {
-        writeLog('espeak spawn error: ' + String(err));
-        return settle({ success: false, error: String(err) });
-      });
+      const doPlay = (file, rate, channels) => {
+        const aplayArgs = ['-q', '-f', 'S16_LE', '-r', String(rate), '-c', String(channels), '-D', device, file];
+        writeLog('aplay args: ' + JSON.stringify(aplayArgs));
+        const aplay = spawn('aplay', aplayArgs);
+        aplay.on('error', (err) => { writeLog('aplay spawn error: ' + String(err)); return settle({ success: false, error: String(err) }); });
+        let stderr = '';
+        aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
+        aplay.on('close', (acode) => { if (acode === 0) return settle({ success: true }); return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr }); });
+        setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
+      };
 
-      espeak.on('close', (code) => {
-        if (code !== 0) {
-          writeLog('espeak exited with code: ' + code);
-          return settle({ success: false, error: 'espeak exited ' + code });
-        }
-
-        // Normalize and resample using sox to a new temp file, then play that file
-        const normFile = tmpFile.replace('.wav', '_norm.wav');
+      const playback = () => {
         const soxArgs = [tmpFile, '-r', '44100', '-c', '2', normFile, 'norm'];
         writeLog('sox args: ' + JSON.stringify(soxArgs));
-        let attemptedSox = true;
         try {
           const sox = spawn('sox', soxArgs);
-
-          sox.on('error', (err) => {
-            writeLog('sox spawn error: ' + String(err));
-            attemptedSox = false;
-          });
-
+          let soxFailed = false;
+          sox.on('error', (err) => { writeLog('sox spawn error: ' + String(err)); soxFailed = true; });
           sox.stderr.on('data', d => writeLog('sox stderr: ' + d.toString()));
-
           sox.on('close', (scode) => {
-            if (scode !== 0) {
-              writeLog('sox exited with code: ' + scode);
-              attemptedSox = false;
-            }
-
-            const playFile = attemptedSox ? normFile : tmpFile;
-            if (!attemptedSox) writeLog('sox not available or failed, falling back to raw espeak WAV. To enable normalization install sox: sudo apt-get install sox libsox-fmt-all');
-
-            // Play the (normalized or raw) file
-            const aplayArgs = ['-q', '-f', 'S16_LE', '-r', attemptedSox ? '44100' : '22050', '-c', attemptedSox ? '2' : '1', '-D', device, playFile];
-            writeLog('aplay args: ' + JSON.stringify(aplayArgs));
-            const aplay = spawn('aplay', aplayArgs);
-
-            aplay.on('error', (err) => {
-              writeLog('aplay spawn error: ' + String(err));
-              return settle({ success: false, error: String(err) });
-            });
-
-            let stderr = '';
-            aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
-
-            aplay.on('close', (acode) => {
-              if (acode === 0) return settle({ success: true });
-              return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr });
-            });
-
-            // Timeout for playback
-            const timeoutHandle = setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
+            if (scode !== 0) { writeLog('sox exited with code: ' + scode); soxFailed = true; }
+            if (!soxFailed) return doPlay(normFile, 44100, 2);
+            writeLog('sox not available or failed, falling back to raw espeak WAV. To enable normalization install sox: sudo apt-get install sox libsox-fmt-all');
+            return doPlay(tmpFile, 22050, 1);
           });
         } catch (err) {
           writeLog('sox handling exception: ' + String(err));
-          // Fallback: play raw file
-          const aplayArgs = ['-q', '-f', 'S16_LE', '-r', '22050', '-c', '1', '-D', device, tmpFile];
-          writeLog('aplay fallback args: ' + JSON.stringify(aplayArgs));
-          const aplay = spawn('aplay', aplayArgs);
-          aplay.on('error', (err) => {
-            writeLog('aplay fallback spawn error: ' + String(err));
-            return settle({ success: false, error: String(err) });
-          });
-                  // Prefer pico2wave (more natural) if available, else use espeak with voice tweaks
-                  let engineUsed = 'espeak';
+          return doPlay(tmpFile, 22050, 1);
+        }
+      };
+
+      const generate = () => {
+        if (engineUsed === 'pico2wave') {
+          const picoArgs = ['-w', tmpFile, sanitized];
+          writeLog('pico2wave args: ' + JSON.stringify(picoArgs));
+          const pico = spawn('pico2wave', picoArgs);
+          pico.on('error', (err) => { writeLog('pico2wave spawn error: ' + String(err)); engineUsed = 'espeak'; generate(); });
+          pico.on('close', (code) => { if (code !== 0) { writeLog('pico2wave exited with code: ' + code); engineUsed = 'espeak'; generate(); return; } playback(); });
+        } else {
+          const espeakArgs = ['-v', 'en-us+f3', '-s', '130', '-a', '160', '-w', tmpFile, sanitized];
+          writeLog('espeak args: ' + JSON.stringify(espeakArgs));
+          const espeak = spawn('espeak', espeakArgs);
+          espeak.on('error', (err) => { writeLog('espeak spawn error: ' + String(err)); return settle({ success: false, error: String(err) }); });
+          espeak.on('close', (code) => { if (code !== 0) { writeLog('espeak exited with code: ' + code); return settle({ success: false, error: 'espeak exited ' + code }); } playback(); });
+        }
+      };
+
+      generate();
+    } catch (err) {
+      try { fs.appendFileSync(path.join(app.getPath('userData'), 'tts.log'), new Date().toISOString() + ' speak-text internal: ' + String(err) + '\n', 'utf8'); } catch (e) {}
+      return resolve({ success: false, error: String(err) });
+    }
+  });
+});
                   try {
                     const whichPico = spawnSync('which', ['pico2wave']);
                     if (whichPico.status === 0) engineUsed = 'pico2wave';
@@ -653,6 +629,106 @@ ipcMain.handle('speak-text', async (event, { text }) => {
                     const picoArgs = ['-w', tmpFile, sanitized];
                     writeLog('pico2wave args: ' + JSON.stringify(picoArgs));
                     const pico = spawn('pico2wave', picoArgs);
+  // TTS: speak-text handler uses espeak/pico2wave + sox (optional) + aplay to provide reliable audio
+  ipcMain.handle('speak-text', async (event, { text }) => {
+    return new Promise((resolve) => {
+      try {
+        if (!text) return resolve({ success: false, error: 'No text provided' });
+
+        // Sanitize text: strip asterisks and collapse whitespace
+        const sanitized = ('' + text).replace(/\*/g, '').replace(/\s+/g, ' ').trim();
+
+        const logPath = path.join(app.getPath('userData'), 'tts.log');
+        const tmpLogPath = '/tmp/famsync-tts.log';
+        try { console.log('TTS logs will be written to:', logPath, 'and', tmpLogPath); } catch (e) {}
+        const writeLog = (msg) => {
+          const line = new Date().toISOString() + ' ' + msg + '\n';
+          try { fs.appendFileSync(logPath, line, 'utf8'); } catch (e) { /* ignore */ }
+          try { fs.appendFileSync(tmpLogPath, line, 'utf8'); } catch (e) { /* ignore */ }
+        };
+
+        writeLog('TTS start: ' + sanitized.slice(0, 500));
+
+        // Estimate duration
+        const wordCount = sanitized.split(/\s+/).filter(Boolean).length;
+        const estimatedMs = Math.ceil((wordCount / 2.5) * 1000);
+        const timeoutMs = Math.min(Math.max(estimatedMs + 3000, 5000), 2 * 60 * 1000);
+        writeLog('TTS words=' + wordCount + ' estimatedMs=' + estimatedMs + ' timeoutMs=' + timeoutMs);
+
+        const { spawn, spawnSync } = require('child_process');
+        const device = 'plughw:2,0';
+        const tmpFile = path.join('/tmp', `famsync_tts_${Date.now()}.wav`);
+        const normFile = tmpFile.replace('.wav', '_norm.wav');
+
+        // Choose engine: prefer pico2wave
+        let engineUsed = 'espeak';
+        try { const whichPico = spawnSync('which', ['pico2wave']); if (whichPico.status === 0) engineUsed = 'pico2wave'; } catch (e) { engineUsed = 'espeak'; }
+        writeLog('TTS engine chosen: ' + engineUsed);
+
+        let settled = false;
+        const settle = (result) => {
+          if (settled) return;
+          settled = true;
+          try { if (fs.existsSync(tmpFile)) fs.unlinkSync(tmpFile); } catch (e) { writeLog('tmp unlink failed: ' + String(e)); }
+          try { if (fs.existsSync(normFile)) fs.unlinkSync(normFile); } catch (e) { /* ignore */ }
+          writeLog('TTS end: ' + JSON.stringify(result));
+          resolve(result);
+        };
+
+        const doPlay = (file, rate, channels) => {
+          const aplayArgs = ['-q', '-f', 'S16_LE', '-r', String(rate), '-c', String(channels), '-D', device, file];
+          writeLog('aplay args: ' + JSON.stringify(aplayArgs));
+          const aplay = spawn('aplay', aplayArgs);
+          aplay.on('error', (err) => { writeLog('aplay spawn error: ' + String(err)); return settle({ success: false, error: String(err) }); });
+          let stderr = '';
+          aplay.stderr.on('data', d => { stderr += d.toString(); writeLog('aplay stderr: ' + d.toString()); });
+          aplay.on('close', (acode) => { if (acode === 0) return settle({ success: true }); return settle({ success: false, error: 'aplay exited with code ' + acode + ' stderr: ' + stderr }); });
+          setTimeout(() => { if (!settled) settle({ success: true, timeout: true }); }, timeoutMs);
+        };
+
+        const playback = () => {
+          const soxArgs = [tmpFile, '-r', '44100', '-c', '2', normFile, 'norm'];
+          writeLog('sox args: ' + JSON.stringify(soxArgs));
+          try {
+            const sox = spawn('sox', soxArgs);
+            let soxFailed = false;
+            sox.on('error', (err) => { writeLog('sox spawn error: ' + String(err)); soxFailed = true; });
+            sox.stderr.on('data', d => writeLog('sox stderr: ' + d.toString()));
+            sox.on('close', (scode) => {
+              if (scode !== 0) { writeLog('sox exited with code: ' + scode); soxFailed = true; }
+              if (!soxFailed) return doPlay(normFile, 44100, 2);
+              writeLog('sox not available or failed, falling back to raw espeak WAV. To enable normalization install sox: sudo apt-get install sox libsox-fmt-all');
+              return doPlay(tmpFile, 22050, 1);
+            });
+          } catch (err) {
+            writeLog('sox handling exception: ' + String(err));
+            return doPlay(tmpFile, 22050, 1);
+          }
+        };
+
+        const generate = () => {
+          if (engineUsed === 'pico2wave') {
+            const picoArgs = ['-w', tmpFile, sanitized];
+            writeLog('pico2wave args: ' + JSON.stringify(picoArgs));
+            const pico = spawn('pico2wave', picoArgs);
+            pico.on('error', (err) => { writeLog('pico2wave spawn error: ' + String(err)); engineUsed = 'espeak'; generate(); });
+            pico.on('close', (code) => { if (code !== 0) { writeLog('pico2wave exited with code: ' + code); engineUsed = 'espeak'; generate(); return; } playback(); });
+          } else {
+            const espeakArgs = ['-v', 'en-us+f3', '-s', '130', '-a', '160', '-w', tmpFile, sanitized];
+            writeLog('espeak args: ' + JSON.stringify(espeakArgs));
+            const espeak = spawn('espeak', espeakArgs);
+            espeak.on('error', (err) => { writeLog('espeak spawn error: ' + String(err)); return settle({ success: false, error: String(err) }); });
+            espeak.on('close', (code) => { if (code !== 0) { writeLog('espeak exited with code: ' + code); return settle({ success: false, error: 'espeak exited ' + code }); } playback(); });
+          }
+        };
+
+        generate();
+      } catch (err) {
+        try { fs.appendFileSync(path.join(app.getPath('userData'), 'tts.log'), new Date().toISOString() + ' speak-text internal: ' + String(err) + '\n', 'utf8'); } catch (e) {}
+        return resolve({ success: false, error: String(err) });
+      }
+    });
+  });
                     pico.on('error', (err) => {
                       writeLog('pico2wave spawn error: ' + String(err));
                       // fallback to espeak
