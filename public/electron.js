@@ -506,6 +506,12 @@ ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
       throw new Error(JSON.stringify(json));
     }
 
+    return { success: true, tokens: json };
+  } catch (err) {
+    console.error('refresh-auth-token failed', err);
+    return { success: false, error: String(err) };
+  }
+});
 // TTS: speak-text handler uses espeak/pico2wave + sox (optional) + aplay to provide reliable audio
 ipcMain.handle('speak-text', async (event, { text }) => {
   return new Promise((resolve) => {
