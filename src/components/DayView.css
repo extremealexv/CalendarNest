@@ -160,6 +160,14 @@
   touch-action: pan-y;
 }
 
+/* Fallback forcing a scrollable area when layout gives the schedule the full content height
+   Use this when JS determines the container equals scrollHeight (no native overflow) */
+.day-schedule.force-scroll {
+  /* conservative estimate: leave room for header and controls */
+  max-height: calc(100vh - 220px) !important;
+  overflow-y: auto !important;
+}
+
 /* Allow pointer dragging when touch isn't available */
 .day-schedule { touch-action: pan-y; -ms-touch-action: pan-y; }
 

@@ -251,6 +251,25 @@ const DayView = ({
     if (!container) return;
     try {
       console.debug('[DayView] mount auto-scroll: container', container, 'clientHeight', container.clientHeight, 'scrollHeight', container.scrollHeight);
+      // If the container exactly equals its content height, layout gave it full height and no scrolling is possible.
+      // In that case we enable a conservative force-scroll fallback so users can scroll the schedule.
+      if ((container.clientHeight || 0) === (container.scrollHeight || 0) && (container.scrollHeight || 0) > 800) {
+        try {
+          console.debug('[DayView] clientHeight === scrollHeight -> enabling force-scroll fallback');
+          const headerEl = document.querySelector('.header');
+          const headerBottom = headerEl ? headerEl.getBoundingClientRect().bottom : 0;
+          const kb = document.querySelector('.onscreen-kb');
+          const kbHeight = kb ? kb.getBoundingClientRect().height : 0;
+          const padding = 40; // safety padding
+          const available = Math.max(200, window.innerHeight - headerBottom - kbHeight - padding);
+          container.classList.add('force-scroll');
+          container.dataset.forcedMax = String(available);
+          container.style.maxHeight = available + 'px';
+          console.debug('[DayView] applied forced maxHeight:', available);
+        } catch (e) {
+          console.debug('[DayView] error applying force-scroll', e);
+        }
+      }
       // If container is too small (layout didn't assign height), compute available space
       if ((container.clientHeight || 0) < 120) {
         try {
