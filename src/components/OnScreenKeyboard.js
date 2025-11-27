@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import './OnScreenKeyboard.css';
 
 const LAYOUTS = {
@@ -22,10 +22,21 @@ export default function OnScreenKeyboard({ visible, onClose }) {
   const [shiftActive, setShiftActive] = useState(false);
   const [layout, setLayout] = useState('en');
 
+  useEffect(() => {
+    if (visible) {
+      console.debug('[OnScreenKeyboard] mounted visible=', visible, 'layout=', layout, 'shift=', shiftActive, 'focusedElement=', window.__famsync_focusedElement, 'document.activeElement=', document.activeElement);
+    } else {
+      console.debug('[OnScreenKeyboard] not visible');
+    }
+  }, [visible]);
+
   if (!visible) return null;
 
   const getTarget = () => {
-    return (window.__famsync_focusedElement && (window.__famsync_focusedElement.tagName)) ? window.__famsync_focusedElement : document.activeElement;
+    const t = (window.__famsync_focusedElement && (window.__famsync_focusedElement.tagName)) ? window.__famsync_focusedElement : document.activeElement;
+    // Debug: report resolved target
+    try { console.debug('[OnScreenKeyboard] getTarget ->', t); } catch (e) {}
+    return t;
   };
 
   const applyCharToElement = (el, char) => {
@@ -38,18 +49,25 @@ export default function OnScreenKeyboard({ visible, onClose }) {
       el.selectionStart = el.selectionEnd = start + char.length;
       el.dispatchEvent(new Event('input', { bubbles: true }));
       try { el.focus(); } catch (e) {}
+      try { console.debug('[OnScreenKeyboard] applyCharToElement inserted:', JSON.stringify(char), 'into', el, 'newValueLength:', (el.value || '').length); } catch (ex) {}
       return true;
     }
     if (el.isContentEditable) {
       document.execCommand('insertText', false, char);
+      try { console.debug('[OnScreenKeyboard] applyCharToElement contentEditable insert:', char); } catch (ex) {}
       return true;
     }
+    try { console.debug('[OnScreenKeyboard] applyCharToElement failed — no compatible target', el); } catch (ex) {}
     return false;
   };
 
   const sendKey = (rawKey) => {
     const el = getTarget();
-    if (!el) return;
+    console.debug('[OnScreenKeyboard] sendKey ->', rawKey, 'shiftActive=', shiftActive, 'layout=', layout, 'target=', el);
+    if (!el) {
+      console.debug('[OnScreenKeyboard] sendKey aborted: no target');
+      return;
+    }
 
     // control keys
     if (rawKey === 'Back') {
@@ -89,19 +107,24 @@ export default function OnScreenKeyboard({ visible, onClose }) {
 
     if (rawKey === 'Shift') {
       setShiftActive(prev => !prev);
+      console.debug('[OnScreenKeyboard] Shift toggled ->', !shiftActive);
       return;
     }
 
     // character insertion
     let char = rawKey;
-    if (shiftActive && char.length === 1) char = char.toUpperCase();
+  if (shiftActive && char.length === 1) char = char.toUpperCase();
 
     applyCharToElement(el, char);
     if (shiftActive) setShiftActive(false);
   };
 
   const switchLayout = () => {
-    setLayout(prev => prev === 'en' ? 'ru' : 'en');
+    setLayout(prev => {
+      const next = prev === 'en' ? 'ru' : 'en';
+      console.debug('[OnScreenKeyboard] switchLayout ->', next);
+      return next;
+    });
     setShiftActive(false);
   };
 
@@ -111,10 +134,20 @@ export default function OnScreenKeyboard({ visible, onClose }) {
     <div className="onscreen-kb" role="dialog" aria-label="On-screen keyboard">
       <div className="kb-header">
         <div style={{display:'flex', gap:8}}>
-          <button className={`kb-key small ${shiftActive ? 'active' : ''}`} onMouseDown={(e) => e.preventDefault()} onClick={() => setShiftActive(s => !s)} tabIndex={-1}>⇧</button>
-          <button className="kb-key small" onMouseDown={(e) => e.preventDefault()} onClick={switchLayout} tabIndex={-1}>{layout === 'en' ? 'EN' : 'RU'}</button>
+          <button
+            className={`kb-key small ${shiftActive ? 'active' : ''}`}
+            onMouseDown={(e) => { console.debug('[OnScreenKeyboard] header Shift mouseDown'); e.preventDefault(); }}
+            onClick={() => { setShiftActive(s => { console.debug('[OnScreenKeyboard] header Shift click ->', !s); return !s; }); }}
+            tabIndex={-1}
+          >⇧</button>
+          <button
+            className="kb-key small"
+            onMouseDown={(e) => { console.debug('[OnScreenKeyboard] header Layout mouseDown'); e.preventDefault(); }}
+            onClick={() => { switchLayout(); }}
+            tabIndex={-1}
+          >{layout === 'en' ? 'EN' : 'RU'}</button>
         </div>
-        <button className="kb-close" onClick={onClose}>✕</button>
+        <button className="kb-close" onClick={() => { console.debug('[OnScreenKeyboard] close clicked'); onClose && onClose(); }}>✕</button>
       </div>
       <div className="kb-rows">
         {keys.map((row, i) => (
@@ -126,8 +159,8 @@ export default function OnScreenKeyboard({ visible, onClose }) {
                 <button
                   key={k + i}
                   className={`kb-key kb-key-${isSpace ? 'space' : 'std'} ${k === 'Shift' ? 'kb-shift' : ''} ${shiftActive && k !== 'Shift' ? 'shift-active' : ''}`}
-                  onMouseDown={(e) => e.preventDefault()}
-                  onClick={() => sendKey(k)}
+                  onMouseDown={(e) => { try { console.debug('[OnScreenKeyboard] key mouseDown ->', k); } catch (ex) {} e.preventDefault(); }}
+                  onClick={() => { try { console.debug('[OnScreenKeyboard] key click ->', k); } catch (ex) {} sendKey(k); }}
                   tabIndex={-1}
                 >
                   {label}

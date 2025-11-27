@@ -127,9 +127,12 @@ function App() {
       if (!t) return;
       const tag = (t.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {
+        console.debug('[App] focusin -> target:', t, 'tag:', tag);
         setKeyboardVisible(true);
         // remember last focused element for the on-screen keyboard
         try { window.__famsync_focusedElement = t; } catch (ex) {}
+        // also log current activeElement for debugging
+        try { console.debug('[App] document.activeElement after focusin:', document.activeElement); } catch (ex) {}
       }
     };
     const onFocusOut = (e) => {
@@ -139,6 +142,8 @@ function App() {
       if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {
         // small delay to allow next focused element to be detected
         setTimeout(() => {
+          // Debug: see what element becomes active after blur
+          try { console.debug('[App] focusout -> previous target:', t, 'document.activeElement now:', document.activeElement); } catch (ex) {}
           setKeyboardVisible(false);
           try { window.__famsync_focusedElement = null; } catch (ex) {}
         }, 150);

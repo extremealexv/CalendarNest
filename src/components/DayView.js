@@ -250,6 +250,7 @@ const DayView = ({
     const container = scheduleRef.current;
     if (!container) return;
     try {
+      console.debug('[DayView] mount auto-scroll: container', container, 'clientHeight', container.clientHeight, 'scrollHeight', container.scrollHeight);
       // If container is too small (layout didn't assign height), compute available space
       if ((container.clientHeight || 0) < 120) {
         try {
@@ -260,6 +261,7 @@ const DayView = ({
           const kbHeight = kb ? kb.getBoundingClientRect().height : 0;
           const padding = 40; // safety padding
           const available = Math.max(200, window.innerHeight - headerBottom - kbHeight - padding);
+          console.debug('[DayView] computed available height', available, 'headerBottom', headerBottom, 'kbHeight', kbHeight);
           container.style.maxHeight = available + 'px';
         } catch (e) {
           // ignore measurement errors
@@ -272,6 +274,7 @@ const DayView = ({
         if (el) {
           // center the hour in view for better visibility
           const offset = el.offsetTop - (container.clientHeight / 2) + (el.clientHeight / 2);
+          console.debug('[DayView] auto-scroll to hour', nowHour, 'element offsetTop', el.offsetTop, 'container.clientHeight', container.clientHeight, 'calculated offset', offset);
           container.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
         }
       } else {
@@ -289,6 +292,7 @@ const DayView = ({
     const onTouchStart = (ev) => {
       const t = ev.touches && ev.touches[0];
       if (!t) return;
+      console.debug('[DayView] touchstart y=', t.clientY, 'scrollTop=', container.scrollTop);
       touchState.current.startY = t.clientY;
       touchState.current.startScroll = container.scrollTop;
       touchState.current.isDragging = true;
@@ -298,12 +302,15 @@ const DayView = ({
       const t = ev.touches && ev.touches[0];
       if (!t) return;
       const dy = t.clientY - touchState.current.startY;
+      // Debug: show dy and computed scrollTop
+      console.debug('[DayView] touchmove dy=', dy, 'startY=', touchState.current.startY, 'startScroll=', touchState.current.startScroll);
       // invert so dragging up scrolls down
       container.scrollTop = touchState.current.startScroll - dy;
       // prevent parent handlers
       ev.preventDefault();
     };
     const onTouchEnd = () => {
+      console.debug('[DayView] touchend final scrollTop=', container.scrollTop);
       touchState.current.isDragging = false;
     };
     container.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -311,6 +318,7 @@ const DayView = ({
     container.addEventListener('touchend', onTouchEnd);
     // Mouse drag support for non-touch kiosks
     const onMouseDown = (ev) => {
+      console.debug('[DayView] mousedown y=', ev.clientY, 'scrollTop=', container.scrollTop);
       touchState.current.startY = ev.clientY;
       touchState.current.startScroll = container.scrollTop;
       touchState.current.isDragging = true;
@@ -319,9 +327,11 @@ const DayView = ({
     const onMouseMove = (ev) => {
       if (!touchState.current.isDragging) return;
       const dy = ev.clientY - touchState.current.startY;
+      console.debug('[DayView] mousemove dy=', dy, 'startY=', touchState.current.startY, 'startScroll=', touchState.current.startScroll);
       container.scrollTop = touchState.current.startScroll - dy;
     };
     const onMouseUp = () => {
+      console.debug('[DayView] mouseup final scrollTop=', container.scrollTop);
       touchState.current.isDragging = false;
     };
     container.addEventListener('mousedown', onMouseDown);
@@ -335,6 +345,17 @@ const DayView = ({
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
+  }, [scheduleRef]);
+
+  // Additional runtime diagnostic: log scroll events so we can see interactions
+  useEffect(() => {
+    const container = scheduleRef.current;
+    if (!container) return;
+    const onScroll = () => {
+      try { console.debug('[DayView] scrollTop=', container.scrollTop, 'clientHeight=', container.clientHeight, 'scrollHeight=', container.scrollHeight); } catch (e) {}
+    };
+    container.addEventListener('scroll', onScroll);
+    return () => container.removeEventListener('scroll', onScroll);
   }, [scheduleRef]);
 
   return (
