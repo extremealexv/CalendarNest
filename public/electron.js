@@ -602,19 +602,51 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
 
       const generate = () => {
         if (engineUsed === 'rhvoice') {
-          // Use RHVoice-test: write text to stdin and let RHVoice produce WAV
+          // Prefer streaming via FIFO to start playback as soon as data is available
+          const fifo = path.join('/tmp', `famsync_tts_fifo_${Date.now()}.wav`);
+          writeLog('Attempting FIFO streaming via: ' + fifo);
+          try {
+            // create FIFO
+            try { if (fs.existsSync(fifo)) fs.unlinkSync(fifo); } catch (e) {}
+            const mk = spawnSync('mkfifo', [fifo]);
+            if (mk.status === 0) {
+              writeLog('mkfifo succeeded');
+              // start aplay reading from FIFO
+              const aplayArgs = ['-q', '-D', device, fifo];
+              writeLog('aplay fifo args: ' + JSON.stringify(aplayArgs));
+              const aplayProc = spawn('aplay', aplayArgs);
+              aplayProc.on('error', (err) => { writeLog('aplay fifo spawn error: ' + String(err)); });
+
+              // spawn RHVoice to write to fifo
+              const rhArgs = ['-p', 'Elena', '-o', fifo];
+              writeLog('RHVoice fifo args: ' + JSON.stringify(rhArgs));
+              const rh = spawn('RHVoice-test', rhArgs);
+              rh.on('error', (err) => { writeLog('RHVoice fifo spawn error: ' + String(err)); });
+              try { rh.stdin.write(sanitized); rh.stdin.end(); } catch (werr) { writeLog('RHVoice stdin write failed: ' + String(werr)); }
+
+              rh.on('close', (code) => {
+                writeLog('RHVoice fifo closed with code: ' + code);
+                // wait for aplay to finish
+                aplayProc.on('close', () => {
+                  try { if (fs.existsSync(fifo)) fs.unlinkSync(fifo); } catch (e) {}
+                  playback(); // still run normalization/playback path (will fallback if sox missing)
+                });
+              });
+              return;
+            } else {
+              writeLog('mkfifo failed, falling back to file generation: ' + JSON.stringify(mk));
+            }
+          } catch (err) {
+            writeLog('FIFO streaming exception: ' + String(err));
+          }
+
+          // Fallback: write to tmp file then playback
           const rhArgs = ['-p', 'Elena', '-o', tmpFile];
-          writeLog('RHVoice args: ' + JSON.stringify(rhArgs));
+          writeLog('RHVoice file args: ' + JSON.stringify(rhArgs));
           try {
             const rh = spawn('RHVoice-test', rhArgs);
             rh.on('error', (err) => { writeLog('RHVoice spawn error: ' + String(err)); engineUsed = 'espeak'; generate(); });
-            // write text to stdin of RHVoice-test
-            try {
-              rh.stdin.write(sanitized);
-              rh.stdin.end();
-            } catch (werr) {
-              writeLog('RHVoice stdin write failed: ' + String(werr));
-            }
+            try { rh.stdin.write(sanitized); rh.stdin.end(); } catch (werr) { writeLog('RHVoice stdin write failed: ' + String(werr)); }
             rh.on('close', (code) => { if (code !== 0) { writeLog('RHVoice exited with code: ' + code); engineUsed = 'espeak'; generate(); return; } playback(); });
           } catch (err) {
             writeLog('RHVoice handling exception: ' + String(err));
