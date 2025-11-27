@@ -17,4 +17,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ,
   // speakText accepts (text, lang) where lang is a BCP-47 like 'en' or 'ru'
   speakText: (text, lang = 'en') => ipcRenderer.invoke('speak-text', { text, lang })
+  ,
+  // Show/hide the OS virtual keyboard (useful when external browser prompts for input)
+  showOsKeyboard: () => ipcRenderer.invoke('show-os-keyboard'),
+  hideOsKeyboard: () => ipcRenderer.invoke('hide-os-keyboard')
 });

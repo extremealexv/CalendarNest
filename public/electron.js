@@ -195,7 +195,10 @@ function createWindow() {
     if (!isDev) {
       return { action: 'deny' };
     }
-    
+    try {
+      // If opening externally on linux try to show OS keyboard to help with login forms
+      if (process.platform === 'linux') tryStartOsKeyboard();
+    } catch (e) { console.debug('show OS keyboard attempt failed for external link', e); }
     shell.openExternal(url);
     return { action: 'deny' };
   });
@@ -292,6 +295,14 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
         }
       });
 
+      // If we're on Linux, try to show the OS virtual keyboard so users can type into external auth flows
+      try {
+        if (process.platform === 'linux') {
+          console.log('Attempting to show OS virtual keyboard for auth window');
+          tryStartOsKeyboard();
+        }
+      } catch (e) { console.error('show OS keyboard attempt failed', e); }
+
       // Associate authWindow with loopback server entry if provided
       if (serverId && loopbackServers.has(String(serverId))) {
         const entry = loopbackServers.get(String(serverId));
@@ -335,6 +346,10 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
       });
 
       authWindow.on('closed', () => {
+        try {
+          // hide OS keyboard when auth window closes
+          tryHideOsKeyboard();
+        } catch (e) { console.debug('Error hiding OS keyboard on authWindow close', e); }
         if (!settled) {
           settled = true;
           reject(new Error('Auth window closed'));
@@ -419,6 +434,58 @@ const http = require('http');
 const loopbackServers = new Map(); // serverId -> { server, port, resolver }
 let nextLoopbackId = 1;
 
+// Track an OS keyboard process so we can show/hide it when needed
+let osKeyboardProc = null;
+const tryStartOsKeyboard = () => {
+  const { spawn } = require('child_process');
+  if (osKeyboardProc && !osKeyboardProc.killed) return osKeyboardProc;
+  const candidates = [
+    { cmd: 'onboard', args: [] },
+    { cmd: 'matchbox-keyboard', args: [] },
+    { cmd: 'florence', args: [] }
+  ];
+  for (const c of candidates) {
+    try {
+      const p = spawn(c.cmd, c.args, { detached: true, stdio: 'ignore' });
+      p.unref();
+      osKeyboardProc = p;
+      console.log('Launched OS keyboard:', c.cmd);
+      return osKeyboardProc;
+    } catch (e) {
+      // try next
+      console.log('Failed to launch', c.cmd, e && e.message);
+    }
+  }
+  // As a fallback, try to use 'xdg-open' to open onboard if present via desktop entry
+  try {
+    const p2 = spawn('onboard', [], { detached: true, stdio: 'ignore' });
+    p2.unref();
+    osKeyboardProc = p2;
+    return osKeyboardProc;
+  } catch (e) {}
+  return null;
+};
+
+const tryHideOsKeyboard = () => {
+  try {
+    if (osKeyboardProc && !osKeyboardProc.killed) {
+      try { process.kill(-osKeyboardProc.pid); } catch (e) { try { osKeyboardProc.kill(); } catch (ee) {} }
+      osKeyboardProc = null;
+      console.log('OS keyboard process killed');
+      return true;
+    }
+    // fallback: try pkill common keyboard processes
+    const { spawnSync } = require('child_process');
+    spawnSync('pkill', ['-f', 'onboard']);
+    spawnSync('pkill', ['-f', 'matchbox-keyboard']);
+    spawnSync('pkill', ['-f', 'florence']);
+    return true;
+  } catch (e) {
+    console.error('tryHideOsKeyboard error', e);
+    return false;
+  }
+};
+
 ipcMain.handle('create-loopback-server', async () => {
   const id = String(nextLoopbackId++);
   return new Promise((resolve, reject) => {
@@ -482,6 +549,27 @@ ipcMain.handle('wait-auth-code', async (event, { serverId }) => {
       }
     }, 2 * 60 * 1000);
   });
+});
+
+// Expose show/hide OS keyboard via IPC so renderer can request it when needed
+ipcMain.handle('show-os-keyboard', async () => {
+  try {
+    const p = tryStartOsKeyboard();
+    return { success: !!p };
+  } catch (e) {
+    console.error('show-os-keyboard failed', e);
+    return { success: false, error: String(e) };
+  }
+});
+
+ipcMain.handle('hide-os-keyboard', async () => {
+  try {
+    const ok = tryHideOsKeyboard();
+    return { success: !!ok };
+  } catch (e) {
+    console.error('hide-os-keyboard failed', e);
+    return { success: false, error: String(e) };
+  }
 });
 
 // Refresh auth tokens in main process (avoids CORS and allows client_secret)
