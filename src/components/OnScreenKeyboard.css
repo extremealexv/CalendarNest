@@ -13,6 +13,7 @@
 .kb-close { background:transparent; border:none; color:#fff; font-size:18px; padding:6px; }
 .kb-rows { display:flex; flex-direction:column; gap:8px; }
 .kb-row { display:flex; gap:6px; justify-content:center; }
-.kb-key { background:#2d3748; border:none; color:#fff; padding:10px 12px; border-radius:6px; font-size:16px; min-width:34px; }
-.kb-key.space { flex:1; min-width:120px; }
+.kb-key { background:#2d3748; border:none; color:#fff; padding:14px 18px; border-radius:8px; font-size:20px; min-width:46px; box-shadow: 0 2px 6px rgba(0,0,0,0.3); }
+.kb-key.space { flex:1; min-width:180px; }
 .kb-key:active { transform: translateY(1px); }
+.kb-key:focus { outline: none; }

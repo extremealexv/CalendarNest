@@ -128,6 +128,8 @@ function App() {
       const tag = (t.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {
         setKeyboardVisible(true);
+        // remember last focused element for the on-screen keyboard
+        try { window.__famsync_focusedElement = t; } catch (ex) {}
       }
     };
     const onFocusOut = (e) => {
@@ -136,7 +138,10 @@ function App() {
       const tag = (t.tagName || '').toLowerCase();
       if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {
         // small delay to allow next focused element to be detected
-        setTimeout(() => setKeyboardVisible(false), 150);
+        setTimeout(() => {
+          setKeyboardVisible(false);
+          try { window.__famsync_focusedElement = null; } catch (ex) {}
+        }, 150);
       }
     };
     window.addEventListener('focusin', onFocusIn);

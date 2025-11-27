@@ -12,12 +12,18 @@ const KEYS = [
 export default function OnScreenKeyboard({ visible, onClose }) {
   if (!visible) return null;
 
+  const getTarget = () => {
+    // prefer stored focused element from App.js, else document.activeElement
+    return (window.__famsync_focusedElement && (window.__famsync_focusedElement.tagName)) ? window.__famsync_focusedElement : document.activeElement;
+  };
+
   const sendKey = (key) => {
-    const el = document.activeElement;
+    const el = getTarget();
     if (!el) return;
 
     // For inputs and textareas
-    if (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+  const tag = (el.tagName || '').toUpperCase();
+  if (tag === 'INPUT' || tag === 'TEXTAREA') {
       if (key === 'Back') {
         const start = el.selectionStart || 0;
         const end = el.selectionEnd || 0;
@@ -32,13 +38,14 @@ export default function OnScreenKeyboard({ visible, onClose }) {
           el.selectionStart = el.selectionEnd = start;
         }
         el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.focus();
+        try { el.focus(); } catch (e) {}
         return;
       }
       if (key === 'Enter') {
         el.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter' }));
         el.dispatchEvent(new KeyboardEvent('keypress', { key: 'Enter' }));
         el.dispatchEvent(new KeyboardEvent('keyup', { key: 'Enter' }));
+        try { el.focus(); } catch (e) {}
         return;
       }
       if (key === 'Space') {
@@ -48,10 +55,10 @@ export default function OnScreenKeyboard({ visible, onClose }) {
         el.value = val.slice(0, start) + ' ' + val.slice(end);
         el.selectionStart = el.selectionEnd = start + 1;
         el.dispatchEvent(new Event('input', { bubbles: true }));
-        el.focus();
+        try { el.focus(); } catch (e) {}
         return;
       }
-      if (key === 'Shift') return; // noop for now
+  if (key === 'Shift') return; // noop for now
 
       // insert character
       const start = el.selectionStart || 0;
@@ -60,7 +67,7 @@ export default function OnScreenKeyboard({ visible, onClose }) {
       el.value = val.slice(0, start) + key + val.slice(end);
       el.selectionStart = el.selectionEnd = start + key.length;
       el.dispatchEvent(new Event('input', { bubbles: true }));
-      el.focus();
+      try { el.focus(); } catch (e) {}
       return;
     }
 
@@ -86,7 +93,14 @@ export default function OnScreenKeyboard({ visible, onClose }) {
         {KEYS.map((row, i) => (
           <div className="kb-row" key={`row-${i}`}>
             {row.map((k) => (
-              <button key={k} className={`kb-key kb-key-${k === 'Space' ? 'space' : 'std'}`} onClick={() => sendKey(k === 'Back' ? 'Back' : (k === 'Enter' ? 'Enter' : (k === 'Space' ? 'Space' : k)))}>
+              <button
+                key={k}
+                className={`kb-key kb-key-${k === 'Space' ? 'space' : 'std'}`}
+                // prevent the button from taking focus when tapped
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => sendKey(k === 'Back' ? 'Back' : (k === 'Enter' ? 'Enter' : (k === 'Space' ? 'Space' : k)))}
+                tabIndex={-1}
+              >
                 {k}
               </button>
             ))}

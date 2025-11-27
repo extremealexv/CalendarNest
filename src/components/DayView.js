@@ -19,6 +19,7 @@ const DayView = ({
   
   const parsedSelected = safeParse(selectedDate) || new Date();
   const scheduleRef = useRef(null);
+  const touchState = useRef({ startY: 0, startScroll: 0, isDragging: false });
 
   const dayEvents = events.filter(event => {
     const eventStart = safeParse(event.start?.dateTime || event.start?.date);
@@ -265,6 +266,40 @@ const DayView = ({
       // silent
     }
   }, [parsedSelected, scheduleRef, events.length]);
+
+  // touch drag to scroll support for kiosks that don't expose native scroll
+  useEffect(() => {
+    const container = scheduleRef.current;
+    if (!container) return;
+    const onTouchStart = (ev) => {
+      const t = ev.touches && ev.touches[0];
+      if (!t) return;
+      touchState.current.startY = t.clientY;
+      touchState.current.startScroll = container.scrollTop;
+      touchState.current.isDragging = true;
+    };
+    const onTouchMove = (ev) => {
+      if (!touchState.current.isDragging) return;
+      const t = ev.touches && ev.touches[0];
+      if (!t) return;
+      const dy = t.clientY - touchState.current.startY;
+      // invert so dragging up scrolls down
+      container.scrollTop = touchState.current.startScroll - dy;
+      // prevent parent handlers
+      ev.preventDefault();
+    };
+    const onTouchEnd = () => {
+      touchState.current.isDragging = false;
+    };
+    container.addEventListener('touchstart', onTouchStart, { passive: false });
+    container.addEventListener('touchmove', onTouchMove, { passive: false });
+    container.addEventListener('touchend', onTouchEnd);
+    return () => {
+      container.removeEventListener('touchstart', onTouchStart);
+      container.removeEventListener('touchmove', onTouchMove);
+      container.removeEventListener('touchend', onTouchEnd);
+    };
+  }, [scheduleRef]);
 
   return (
     <div className="day-view">
