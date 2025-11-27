@@ -35,12 +35,31 @@ class AuthService {
           : Promise.reject(new Error('No loopback API available'));
 
         if (window.electronAPI && typeof window.electronAPI.openAuthWindow === 'function') {
-          window.electronAPI.openAuthWindow({ authUrl, serverId }).catch(() => {});
+            try {
+              // Request main process to open an auth popup. Log any errors back to renderer log.
+              window.electronAPI.openAuthWindow({ authUrl, serverId }).catch((e) => {
+                console.error('openAuthWindow failed', e);
+                try { if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[AuthService] openAuthWindow failed: ' + (e && e.message || String(e))); } catch (ex) {}
+              });
+            } catch (e) {
+              console.error('openAuthWindow invoke thrown', e);
+              try { if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[AuthService] openAuthWindow invoke thrown: ' + (e && e.message || String(e))); } catch (ex) {}
+            }
         } else {
           window.open(authUrl, 'google-auth', 'width=600,height=700');
         }
 
-        const result = await waitPromise;
+          // Wait for loopback server to receive the auth code, but instrument errors so hangs are visible
+          let result;
+          try {
+            result = await waitPromise;
+          } catch (e) {
+            console.error('waitForAuthCode failed', e);
+            try { if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[AuthService] waitForAuthCode failed: ' + (e && e.message || String(e))); } catch (ex) {}
+            // Hide any OS keyboard that may have been opened for auth
+            try { if (window.electronAPI && typeof window.electronAPI.hideOsKeyboard === 'function') window.electronAPI.hideOsKeyboard(); } catch (ex) {}
+            throw e;
+          }
         if (!result || !result.code) throw new Error('Authentication failed or timed out');
 
         // Complete auth exchange

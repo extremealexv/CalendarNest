@@ -21,4 +21,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Show/hide the OS virtual keyboard (useful when external browser prompts for input)
   showOsKeyboard: () => ipcRenderer.invoke('show-os-keyboard'),
   hideOsKeyboard: () => ipcRenderer.invoke('hide-os-keyboard')
+  ,
+  // Allow renderer to write a short message to main process log for diagnostics
+  rendererLog: (msg) => ipcRenderer.invoke('renderer-log', { message: String(msg) })
 });

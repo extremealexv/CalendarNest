@@ -572,6 +572,20 @@ ipcMain.handle('hide-os-keyboard', async () => {
   }
 });
 
+// Allow renderer to write a diagnostic message into the main log (userData)
+ipcMain.handle('renderer-log', async (event, { message }) => {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'renderer.log');
+    const line = new Date().toISOString() + ' ' + (String(message) || '') + '\n';
+    try { fs.appendFileSync(logPath, line, 'utf8'); } catch (e) { /* ignore */ }
+    console.log('[renderer-log]', message);
+    return { success: true };
+  } catch (e) {
+    console.error('renderer-log failed', e);
+    return { success: false, error: String(e) };
+  }
+});
+
 // Refresh auth tokens in main process (avoids CORS and allows client_secret)
 ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
   try {

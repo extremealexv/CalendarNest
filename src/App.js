@@ -179,10 +179,31 @@ function App() {
     window.addEventListener('focusin', onFocusIn);
     window.addEventListener('focusout', onFocusOut);
     window.addEventListener('famsync:keyboard', onKeyboardRequest);
+    // Global error handlers - surface uncaught errors and promise rejections to main log
+    const globalErr = (msg, url, lineNo, colNo, err) => {
+      try {
+        console.error('[GlobalError]', msg, url, lineNo, colNo, err && err.stack);
+        if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
+          window.electronAPI.rendererLog(`[GlobalError] ${msg} ${url}:${lineNo}:${colNo} ${err && err.stack ? err.stack : ''}`);
+        }
+      } catch (e) {}
+    };
+    const globalRej = (ev) => {
+      try {
+        console.error('[UnhandledRejection]', ev && ev.reason);
+        if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
+          window.electronAPI.rendererLog(`[UnhandledRejection] ${ev && ev.reason ? (ev.reason.stack || ev.reason) : String(ev)}`);
+        }
+      } catch (e) {}
+    };
+    window.addEventListener('error', (e) => globalErr(e.message, e.filename, e.lineno, e.colno, e.error));
+    window.addEventListener('unhandledrejection', globalRej);
     return () => {
       window.removeEventListener('focusin', onFocusIn);
       window.removeEventListener('focusout', onFocusOut);
       window.removeEventListener('famsync:keyboard', onKeyboardRequest);
+      window.removeEventListener('error', (e) => globalErr(e.message, e.filename, e.lineno, e.colno, e.error));
+      window.removeEventListener('unhandledrejection', globalRej);
     };
   }, []);
 
