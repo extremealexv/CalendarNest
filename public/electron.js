@@ -446,10 +446,20 @@ const tryStartOsKeyboard = () => {
   ];
   for (const c of candidates) {
     try {
-      const p = spawn(c.cmd, c.args, { detached: true, stdio: 'ignore' });
+      // Provide a safer environment for the child so it can connect to the display
+      const env = Object.assign({}, process.env);
+      if (!env.DISPLAY) env.DISPLAY = ':0';
+      if (!env.XAUTHORITY) env.XAUTHORITY = require('path').join(require('os').homedir(), '.Xauthority');
+      const p = spawn(c.cmd, c.args, { detached: true, stdio: ['ignore', 'pipe', 'pipe'], env });
+      // Capture any stderr output for debugging
+      try {
+        p.stderr && p.stderr.on('data', (d) => { try { console.error(`[oskbd:${c.cmd}] stderr:`, d.toString()); } catch (e) {} });
+      } catch (e) {}
+      p.on('error', (err) => { console.error('OS keyboard spawn error for', c.cmd, err); });
+      p.on('close', (code, sig) => { console.log('OS keyboard process closed', c.cmd, code, sig); if (osKeyboardProc && osKeyboardProc.pid === p.pid) osKeyboardProc = null; });
       p.unref();
       osKeyboardProc = p;
-      console.log('Launched OS keyboard:', c.cmd);
+      console.log('Launched OS keyboard:', c.cmd, 'env.DISPLAY=', env.DISPLAY, 'XAUTHORITY=', env.XAUTHORITY);
       return osKeyboardProc;
     } catch (e) {
       // try next
@@ -476,9 +486,9 @@ const tryHideOsKeyboard = () => {
     }
     // fallback: try pkill common keyboard processes
     const { spawnSync } = require('child_process');
-    spawnSync('pkill', ['-f', 'onboard']);
-    spawnSync('pkill', ['-f', 'matchbox-keyboard']);
-    spawnSync('pkill', ['-f', 'florence']);
+    try { spawnSync('pkill', ['-f', 'onboard']); } catch (e) { console.debug('pkill onboard failed', e); }
+    try { spawnSync('pkill', ['-f', 'matchbox-keyboard']); } catch (e) { console.debug('pkill matchbox-keyboard failed', e); }
+    try { spawnSync('pkill', ['-f', 'florence']); } catch (e) { console.debug('pkill florence failed', e); }
     return true;
   } catch (e) {
     console.error('tryHideOsKeyboard error', e);
