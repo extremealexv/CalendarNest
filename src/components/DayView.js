@@ -250,6 +250,21 @@ const DayView = ({
     const container = scheduleRef.current;
     if (!container) return;
     try {
+      // If container is too small (layout didn't assign height), compute available space
+      if ((container.clientHeight || 0) < 120) {
+        try {
+          const headerEl = document.querySelector('.header');
+          const headerBottom = headerEl ? headerEl.getBoundingClientRect().bottom : 0;
+          // detect on-screen keyboard height if present
+          const kb = document.querySelector('.onscreen-kb');
+          const kbHeight = kb ? kb.getBoundingClientRect().height : 0;
+          const padding = 40; // safety padding
+          const available = Math.max(200, window.innerHeight - headerBottom - kbHeight - padding);
+          container.style.maxHeight = available + 'px';
+        } catch (e) {
+          // ignore measurement errors
+        }
+      }
       const today = isToday(parsedSelected);
       if (today) {
         const nowHour = new Date().getHours();

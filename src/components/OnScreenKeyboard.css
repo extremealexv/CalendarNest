@@ -18,3 +18,9 @@
 .kb-key:active { transform: translateY(1px); }
 .kb-key:focus { outline: none; }
 .kb-row { padding: 0 6px; }
+
+/* small variant for header buttons */
+.kb-key.small { padding: 8px 10px; min-width: 36px; font-size: 16px; border-radius: 6px; }
+.kb-key.active, .kb-key.small.active { background: #4CAF50; }
+.shift-active { background: rgba(255,255,255,0.06); }
+.kb-shift { background: linear-gradient(90deg,#444,#333); }
