@@ -8,6 +8,7 @@ import CalendarView from './components/CalendarView';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AddAccountModal from './components/AddAccountModal';
+import OnScreenKeyboard from './components/OnScreenKeyboard';
 
 // Import services
 import { googleCalendarService } from './services/GoogleCalendarService';
@@ -118,6 +119,33 @@ function App() {
   };
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [keyboardVisible, setKeyboardVisible] = useState(false);
+
+  useEffect(() => {
+    const onFocusIn = (e) => {
+      const t = e.target;
+      if (!t) return;
+      const tag = (t.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {
+        setKeyboardVisible(true);
+      }
+    };
+    const onFocusOut = (e) => {
+      const t = e.target;
+      if (!t) return;
+      const tag = (t.tagName || '').toLowerCase();
+      if (tag === 'input' || tag === 'textarea' || t.isContentEditable) {
+        // small delay to allow next focused element to be detected
+        setTimeout(() => setKeyboardVisible(false), 150);
+      }
+    };
+    window.addEventListener('focusin', onFocusIn);
+    window.addEventListener('focusout', onFocusOut);
+    return () => {
+      window.removeEventListener('focusin', onFocusIn);
+      window.removeEventListener('focusout', onFocusOut);
+    };
+  }, []);
 
   const handleAddModalComplete = async (accountWithNickname) => {
     try {
@@ -212,6 +240,7 @@ function App() {
           accounts={accounts}
         />
       </div>
+      <OnScreenKeyboard visible={keyboardVisible} onClose={() => setKeyboardVisible(false)} />
     </div>
   );
 }

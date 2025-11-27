@@ -50,6 +50,8 @@ class GeminiService {
 ${languageInstruction}
 Parse the following text into a structured calendar event. Today is ${currentDateStr}.
 
+Important: produce values that are safe for text-to-speech (TTS). For any text fields (title, description, location, participants) return plain, short sentences, avoid markdown, emojis, parentheses, or special characters. Expand common abbreviations (e.g., "Mon" -> "Monday", "Dr." -> "Doctor"), and express times in a human-friendly form (e.g., "1 PM" or "13:00") rather than shorthand. Do not include lists or bullet markers inside string fields. Return only the JSON object described below, with field values that are ready to be spoken by a TTS engine.
+
 Available accounts: ${accountsList}
 
 Text: "${text}"
@@ -59,9 +61,9 @@ Return a JSON object with the following structure:
   "title": "Event title",
   "description": "Event description (optional)",
   "startDate": "YYYY-MM-DD",
-  "startTime": "HH:mm" (24-hour format),
+  "startTime": "HH:mm", 
   "endDate": "YYYY-MM-DD", 
-  "endTime": "HH:mm" (24-hour format),
+  "endTime": "HH:mm",
   "location": "Event location (optional)",
   "participants": ["email1", "email2"], // Match against available accounts
   "isAllDay": false,
@@ -123,9 +125,11 @@ Only return the JSON object, no other text.
         account: event.accountName || event.accountEmail
       }));
 
-      const prompt = `
+  const prompt = `
 ${languageInstruction}
 Analyze the following calendar data and provide a natural language summary of availability and conflicts for the family.
+
+Important: format the summary to be read aloud by a TTS engine. Use short, clear sentences; avoid lists, bullet points, emojis, markdown, or excessive punctuation. Expand abbreviations and write times in a TTS-friendly way (e.g., "1 PM", "13:00"). Do not include links or code. Limit the output to plain text (no JSON) and keep it under 180 words. If producing names or locations, return them as spoken-friendly phrases.
 
 Date Range: ${dateRange}
 Accounts: ${accounts.map(acc => acc.name).join(', ')}
@@ -140,7 +144,7 @@ Provide a conversational summary including:
 4. Free time slots suitable for group activities
 5. Weekend availability
 
-Keep the response friendly and family-focused, under 200 words.
+Keep the response friendly and family-focused, under 180 words.
 `;
 
   const result = await this.model.generateContent(prompt);

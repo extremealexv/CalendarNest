@@ -1,0 +1,18 @@
+.onscreen-kb {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(20,20,20,0.95);
+  color: #fff;
+  z-index: 10000;
+  padding: 8px 12px 18px 12px;
+  box-shadow: 0 -6px 24px rgba(0,0,0,0.4);
+}
+.kb-header { display:flex; justify-content:flex-end; }
+.kb-close { background:transparent; border:none; color:#fff; font-size:18px; padding:6px; }
+.kb-rows { display:flex; flex-direction:column; gap:8px; }
+.kb-row { display:flex; gap:6px; justify-content:center; }
+.kb-key { background:#2d3748; border:none; color:#fff; padding:10px 12px; border-radius:6px; font-size:16px; min-width:34px; }
+.kb-key.space { flex:1; min-width:120px; }
+.kb-key:active { transform: translateY(1px); }

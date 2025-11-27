@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { addHours, isSameDay, isToday } from 'date-fns';
 import { safeFormat, safeParse } from '../utils/dateUtils';
 import './DayView.css';
@@ -18,6 +18,7 @@ const DayView = ({
   const hours = Array.from({ length: 24 }, (_, i) => i);
   
   const parsedSelected = safeParse(selectedDate) || new Date();
+  const scheduleRef = useRef(null);
 
   const dayEvents = events.filter(event => {
     const eventStart = safeParse(event.start?.dateTime || event.start?.date);
@@ -189,7 +190,7 @@ const DayView = ({
       const hourEvents = getEventsForHour(hour);
       
       return (
-        <div key={hour} className="day-time-slot">
+        <div key={hour} id={`hour-slot-${hour}`} className="day-time-slot">
           <div className="time-label">{timeLabel}</div>
           <div 
             className="time-content"
@@ -243,6 +244,28 @@ const DayView = ({
     });
   };
 
+  // Auto-scroll to current hour when viewing today, or scroll to top otherwise
+  useEffect(() => {
+    const container = scheduleRef.current;
+    if (!container) return;
+    try {
+      const today = isToday(parsedSelected);
+      if (today) {
+        const nowHour = new Date().getHours();
+        const el = container.querySelector(`#hour-slot-${nowHour}`);
+        if (el) {
+          // center the hour in view for better visibility
+          const offset = el.offsetTop - (container.clientHeight / 2) + (el.clientHeight / 2);
+          container.scrollTo({ top: Math.max(0, offset), behavior: 'smooth' });
+        }
+      } else {
+        container.scrollTo({ top: 0, behavior: 'smooth' });
+      }
+    } catch (e) {
+      // silent
+    }
+  }, [parsedSelected, scheduleRef, events.length]);
+
   return (
     <div className="day-view">
       {renderHeader()}
@@ -252,7 +275,7 @@ const DayView = ({
         </div>
       )}
       {renderAllDayEvents()}
-      <div className="day-schedule">
+      <div className="day-schedule" ref={scheduleRef}>
         {renderTimeSlots()}
       </div>
     </div>
