@@ -1,11 +1,13 @@
-import React, { useState } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import AuthScreen from './AuthScreen';
 import './AddAccountModal.css';
+import { showKeyboard, hideKeyboard } from '../utils/keyboardHelper';
 
 const AddAccountModal = ({ isOpen, onClose, onComplete }) => {
   const [stage, setStage] = useState('auth'); // auth -> nickname
   const [pendingAccount, setPendingAccount] = useState(null);
   const [nickname, setNickname] = useState('');
+  const nicknameRef = useRef(null);
 
   const handleAuthenticated = (account) => {
     setPendingAccount(account);
@@ -20,6 +22,16 @@ const AddAccountModal = ({ isOpen, onClose, onComplete }) => {
     setNickname('');
     setStage('auth');
   };
+
+  useEffect(() => {
+    if (stage === 'nickname' && nicknameRef.current) {
+      try {
+        nicknameRef.current.focus();
+        window.__famsync_focusedElement = nicknameRef.current;
+        showKeyboard();
+      } catch (e) { console.debug('[AddAccountModal] focus nickname failed', e); }
+    }
+  }, [stage]);
 
   if (!isOpen) return null;
 
@@ -37,9 +49,13 @@ const AddAccountModal = ({ isOpen, onClose, onComplete }) => {
             <h2>Choose a nickname</h2>
             <p>Give this account a short name (e.g., "Mom", "Dad", "Kids")</p>
             <input
+              ref={nicknameRef}
+              id="add-account-nickname"
               type="text"
               value={nickname}
               onChange={(e) => setNickname(e.target.value)}
+              onFocus={() => showKeyboard()}
+              onBlur={() => hideKeyboard()}
               placeholder={pendingAccount ? pendingAccount.name : 'Nickname'}
             />
             <div className="actions">

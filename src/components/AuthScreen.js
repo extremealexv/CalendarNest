@@ -17,6 +17,17 @@ const AuthScreen = ({ onAuthenticate }) => {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const scanIntervalRef = useRef(null);
+  const nicknameRef = useRef(null);
+
+  useEffect(() => {
+    if (pendingAccount && nicknameRef.current) {
+      try {
+        nicknameRef.current.focus();
+        window.__famsync_focusedElement = nicknameRef.current;
+        window.dispatchEvent(new CustomEvent('famsync:keyboard', { detail: { visible: true } }));
+      } catch (e) { console.debug('[AuthScreen] focus nickname failed', e); }
+    }
+  }, [pendingAccount]);
 
   useEffect(() => {
     // Clean up camera on unmount
@@ -361,7 +372,21 @@ const AuthScreen = ({ onAuthenticate }) => {
       {pendingAccount && (
         <div className="nickname-prompt" style={{ position: 'fixed', bottom: 16, left: 16, right: 16, background: 'white', padding: 16, borderRadius: 8 }}>
           <h3>Give this account a nickname (optional)</h3>
-          <input value={nicknameInput} onChange={(e) => setNicknameInput(e.target.value)} placeholder="e.g. Mom's phone" style={{ padding: 8, width: '100%', marginBottom: 8 }} />
+          <input
+            ref={nicknameRef}
+            id="auth-nickname-input"
+            value={nicknameInput}
+            onChange={(e) => setNicknameInput(e.target.value)}
+            placeholder="e.g. Mom's phone"
+            style={{ padding: 8, width: '100%', marginBottom: 8 }}
+            onFocus={() => {
+              try { window.__famsync_focusedElement = nicknameRef.current; } catch (e) {}
+              try { window.dispatchEvent(new CustomEvent('famsync:keyboard', { detail: { visible: true } })); } catch (e) {}
+            }}
+            onBlur={() => {
+              try { window.dispatchEvent(new CustomEvent('famsync:keyboard', { detail: { visible: false } })); } catch (e) {}
+            }}
+          />
           <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
             <button className="btn btn-secondary" onClick={cancelNickname}>Skip</button>
             <button className="btn btn-primary" onClick={saveNicknameAndFinish}>Save</button>

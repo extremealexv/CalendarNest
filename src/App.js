@@ -166,11 +166,23 @@ function App() {
         }, 150);
       }
     };
+    const onKeyboardRequest = (ev) => {
+      try {
+        const visible = !!(ev && ev.detail && ev.detail.visible);
+        console.debug('[App] received famsync:keyboard event visible=', visible);
+        setKeyboardVisible(visible);
+        if (!visible) {
+          try { window.__famsync_focusedElement = null; } catch (ex) {}
+        }
+      } catch (e) {}
+    };
     window.addEventListener('focusin', onFocusIn);
     window.addEventListener('focusout', onFocusOut);
+    window.addEventListener('famsync:keyboard', onKeyboardRequest);
     return () => {
       window.removeEventListener('focusin', onFocusIn);
       window.removeEventListener('focusout', onFocusOut);
+      window.removeEventListener('famsync:keyboard', onKeyboardRequest);
     };
   }, []);
 
