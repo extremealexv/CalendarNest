@@ -144,6 +144,23 @@ function App() {
         setTimeout(() => {
           // Debug: see what element becomes active after blur
           try { console.debug('[App] focusout -> previous target:', t, 'document.activeElement now:', document.activeElement); } catch (ex) {}
+          try {
+            const newActive = document.activeElement;
+            // if focus moved into the on-screen keyboard, keep it open
+            if (newActive && typeof newActive.closest === 'function' && newActive.closest('.onscreen-kb')) {
+              console.debug('[App] focus moved into onscreen keyboard; keeping keyboard visible');
+              return;
+            }
+            // if focus moved into another input, update the focused element and keep keyboard open
+            const newTag = (newActive && newActive.tagName || '').toLowerCase();
+            if (newActive && (newTag === 'input' || newTag === 'textarea' || newActive.isContentEditable)) {
+              try { window.__famsync_focusedElement = newActive; } catch (ex) {}
+              console.debug('[App] focus moved to another input; updated focusedElement and keeping keyboard');
+              return;
+            }
+          } catch (ex) {
+            console.debug('[App] focusout post-check error', ex);
+          }
           setKeyboardVisible(false);
           try { window.__famsync_focusedElement = null; } catch (ex) {}
         }, 150);

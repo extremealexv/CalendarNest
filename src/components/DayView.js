@@ -292,7 +292,7 @@ const DayView = ({
     const onTouchStart = (ev) => {
       const t = ev.touches && ev.touches[0];
       if (!t) return;
-      console.debug('[DayView] touchstart y=', t.clientY, 'scrollTop=', container.scrollTop);
+      console.debug('[DayView] touchstart y=', t.clientY, 'scrollTop=', container.scrollTop, 'target=', ev.target);
       touchState.current.startY = t.clientY;
       touchState.current.startScroll = container.scrollTop;
       touchState.current.isDragging = true;
@@ -302,15 +302,20 @@ const DayView = ({
       const t = ev.touches && ev.touches[0];
       if (!t) return;
       const dy = t.clientY - touchState.current.startY;
-      // Debug: show dy and computed scrollTop
-      console.debug('[DayView] touchmove dy=', dy, 'startY=', touchState.current.startY, 'startScroll=', touchState.current.startScroll);
+      // Debug: show dy and computed scrollTop and container metrics
+      try {
+        const cs = window.getComputedStyle(container);
+        console.debug('[DayView] touchmove dy=', dy, 'startY=', touchState.current.startY, 'startScroll=', touchState.current.startScroll, 'container.clientHeight=', container.clientHeight, 'container.scrollHeight=', container.scrollHeight, 'overflowY=', cs.overflowY, 'style.maxHeight=', container.style.maxHeight);
+      } catch (e) {}
       // invert so dragging up scrolls down
       container.scrollTop = touchState.current.startScroll - dy;
+      // read back effect
+      try { console.debug('[DayView] touchmove applied scrollTop ->', container.scrollTop); } catch (e) {}
       // prevent parent handlers
       ev.preventDefault();
     };
     const onTouchEnd = () => {
-      console.debug('[DayView] touchend final scrollTop=', container.scrollTop);
+      console.debug('[DayView] touchend final scrollTop=', container.scrollTop, 'clientHeight=', container.clientHeight, 'scrollHeight=', container.scrollHeight);
       touchState.current.isDragging = false;
     };
     container.addEventListener('touchstart', onTouchStart, { passive: false });
@@ -318,7 +323,7 @@ const DayView = ({
     container.addEventListener('touchend', onTouchEnd);
     // Mouse drag support for non-touch kiosks
     const onMouseDown = (ev) => {
-      console.debug('[DayView] mousedown y=', ev.clientY, 'scrollTop=', container.scrollTop);
+      console.debug('[DayView] mousedown y=', ev.clientY, 'scrollTop=', container.scrollTop, 'target=', ev.target);
       touchState.current.startY = ev.clientY;
       touchState.current.startScroll = container.scrollTop;
       touchState.current.isDragging = true;
@@ -327,11 +332,15 @@ const DayView = ({
     const onMouseMove = (ev) => {
       if (!touchState.current.isDragging) return;
       const dy = ev.clientY - touchState.current.startY;
-      console.debug('[DayView] mousemove dy=', dy, 'startY=', touchState.current.startY, 'startScroll=', touchState.current.startScroll);
+      try {
+        const cs = window.getComputedStyle(container);
+        console.debug('[DayView] mousemove dy=', dy, 'startY=', touchState.current.startY, 'startScroll=', touchState.current.startScroll, 'container.clientHeight=', container.clientHeight, 'container.scrollHeight=', container.scrollHeight, 'overflowY=', cs.overflowY, 'style.maxHeight=', container.style.maxHeight);
+      } catch (e) {}
       container.scrollTop = touchState.current.startScroll - dy;
+      try { console.debug('[DayView] mousemove applied scrollTop ->', container.scrollTop); } catch (e) {}
     };
     const onMouseUp = () => {
-      console.debug('[DayView] mouseup final scrollTop=', container.scrollTop);
+      console.debug('[DayView] mouseup final scrollTop=', container.scrollTop, 'clientHeight=', container.clientHeight, 'scrollHeight=', container.scrollHeight);
       touchState.current.isDragging = false;
     };
     container.addEventListener('mousedown', onMouseDown);

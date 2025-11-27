@@ -25,6 +25,20 @@ export default function OnScreenKeyboard({ visible, onClose }) {
   useEffect(() => {
     if (visible) {
       console.debug('[OnScreenKeyboard] mounted visible=', visible, 'layout=', layout, 'shift=', shiftActive, 'focusedElement=', window.__famsync_focusedElement, 'document.activeElement=', document.activeElement);
+      // ensure the focused element (if any) is visible when keyboard appears
+      try {
+        const target = window.__famsync_focusedElement || document.activeElement;
+        if (target && typeof target.scrollIntoView === 'function') {
+          setTimeout(() => {
+            try {
+              target.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'nearest' });
+              console.debug('[OnScreenKeyboard] scrolled focused element into view', target);
+            } catch (e) { console.debug('[OnScreenKeyboard] scrollIntoView failed', e); }
+          }, 60);
+        }
+      } catch (e) {
+        console.debug('[OnScreenKeyboard] error while trying to scroll focused element', e);
+      }
     } else {
       console.debug('[OnScreenKeyboard] not visible');
     }
@@ -42,14 +56,33 @@ export default function OnScreenKeyboard({ visible, onClose }) {
   const applyCharToElement = (el, char) => {
     const tag = (el.tagName || '').toUpperCase();
     if (tag === 'INPUT' || tag === 'TEXTAREA') {
-      const start = el.selectionStart || 0;
-      const end = el.selectionEnd || 0;
-      const val = el.value || '';
-      el.value = val.slice(0, start) + char + val.slice(end);
-      el.selectionStart = el.selectionEnd = start + char.length;
-      el.dispatchEvent(new Event('input', { bubbles: true }));
-      try { el.focus(); } catch (e) {}
-      try { console.debug('[OnScreenKeyboard] applyCharToElement inserted:', JSON.stringify(char), 'into', el, 'newValueLength:', (el.value || '').length); } catch (ex) {}
+      try {
+        const start = (typeof el.selectionStart === 'number') ? el.selectionStart : 0;
+        const end = (typeof el.selectionEnd === 'number') ? el.selectionEnd : start;
+        const val = el.value || '';
+        const newVal = val.slice(0, start) + char + val.slice(end);
+        // Use native setter so React controlled inputs receive the value change
+        try {
+          if (el.tagName.toUpperCase() === 'INPUT') {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+            if (setter) setter.call(el, newVal);
+            else el.value = newVal;
+          } else {
+            const setter = Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype, 'value')?.set;
+            if (setter) setter.call(el, newVal);
+            else el.value = newVal;
+          }
+        } catch (inner) {
+          el.value = newVal;
+        }
+        try { el.setSelectionRange(start + char.length, start + char.length); } catch (e) {}
+        const ev = new Event('input', { bubbles: true });
+        el.dispatchEvent(ev);
+        try { el.focus(); } catch (e) {}
+        try { console.debug('[OnScreenKeyboard] applyCharToElement inserted:', JSON.stringify(char), 'into', el, 'newValueLength:', (el.value || '').length); } catch (ex) {}
+      } catch (ex) {
+        try { console.debug('[OnScreenKeyboard] applyCharToElement error', ex); } catch (e) {}
+      }
       return true;
     }
     if (el.isContentEditable) {
@@ -137,12 +170,14 @@ export default function OnScreenKeyboard({ visible, onClose }) {
           <button
             className={`kb-key small ${shiftActive ? 'active' : ''}`}
             onMouseDown={(e) => { console.debug('[OnScreenKeyboard] header Shift mouseDown'); e.preventDefault(); }}
+            onTouchStart={(e) => { console.debug('[OnScreenKeyboard] header Shift touchStart'); e.preventDefault(); }}
             onClick={() => { setShiftActive(s => { console.debug('[OnScreenKeyboard] header Shift click ->', !s); return !s; }); }}
             tabIndex={-1}
           >⇧</button>
           <button
             className="kb-key small"
             onMouseDown={(e) => { console.debug('[OnScreenKeyboard] header Layout mouseDown'); e.preventDefault(); }}
+            onTouchStart={(e) => { console.debug('[OnScreenKeyboard] header Layout touchStart'); e.preventDefault(); }}
             onClick={() => { switchLayout(); }}
             tabIndex={-1}
           >{layout === 'en' ? 'EN' : 'RU'}</button>
@@ -160,6 +195,7 @@ export default function OnScreenKeyboard({ visible, onClose }) {
                   key={k + i}
                   className={`kb-key kb-key-${isSpace ? 'space' : 'std'} ${k === 'Shift' ? 'kb-shift' : ''} ${shiftActive && k !== 'Shift' ? 'shift-active' : ''}`}
                   onMouseDown={(e) => { try { console.debug('[OnScreenKeyboard] key mouseDown ->', k); } catch (ex) {} e.preventDefault(); }}
+                  onTouchStart={(e) => { try { console.debug('[OnScreenKeyboard] key touchStart ->', k); } catch (ex) {} e.preventDefault(); }}
                   onClick={() => { try { console.debug('[OnScreenKeyboard] key click ->', k); } catch (ex) {} sendKey(k); }}
                   tabIndex={-1}
                 >
