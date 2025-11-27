@@ -294,10 +294,31 @@ const DayView = ({
     container.addEventListener('touchstart', onTouchStart, { passive: false });
     container.addEventListener('touchmove', onTouchMove, { passive: false });
     container.addEventListener('touchend', onTouchEnd);
+    // Mouse drag support for non-touch kiosks
+    const onMouseDown = (ev) => {
+      touchState.current.startY = ev.clientY;
+      touchState.current.startScroll = container.scrollTop;
+      touchState.current.isDragging = true;
+      ev.preventDefault();
+    };
+    const onMouseMove = (ev) => {
+      if (!touchState.current.isDragging) return;
+      const dy = ev.clientY - touchState.current.startY;
+      container.scrollTop = touchState.current.startScroll - dy;
+    };
+    const onMouseUp = () => {
+      touchState.current.isDragging = false;
+    };
+    container.addEventListener('mousedown', onMouseDown);
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
     return () => {
       container.removeEventListener('touchstart', onTouchStart);
       container.removeEventListener('touchmove', onTouchMove);
       container.removeEventListener('touchend', onTouchEnd);
+      container.removeEventListener('mousedown', onMouseDown);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
     };
   }, [scheduleRef]);
 

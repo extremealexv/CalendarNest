@@ -160,6 +160,9 @@
   touch-action: pan-y;
 }
 
+/* Allow pointer dragging when touch isn't available */
+.day-schedule { touch-action: pan-y; -ms-touch-action: pan-y; }
+
 .day-time-slot {
   display: flex;
   min-height: 60px;
