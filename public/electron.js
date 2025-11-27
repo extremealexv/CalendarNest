@@ -543,10 +543,21 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
       const tmpFile = path.join('/tmp', `famsync_tts_${Date.now()}.wav`);
       const normFile = tmpFile.replace('.wav', '_norm.wav');
 
-  // Choose engine: prefer pico2wave
-  let engineUsed = 'espeak';
-  try { const whichPico = spawnSync('which', ['pico2wave']); if (whichPico.status === 0) engineUsed = 'pico2wave'; } catch (e) { engineUsed = 'espeak'; }
-  writeLog('TTS engine chosen: ' + engineUsed + ' lang=' + lang);
+      // Choose engine: prefer RHVoice for Russian, then pico2wave, then espeak
+      let engineUsed = 'espeak';
+      try {
+        // Prefer RHVoice for Russian if available (higher quality)
+        const whichRh = spawnSync('which', ['RHVoice-test']);
+        if ((String(lang) || '').toLowerCase().startsWith('ru') && whichRh.status === 0) {
+          engineUsed = 'rhvoice';
+        } else {
+          const whichPico = spawnSync('which', ['pico2wave']);
+          if (whichPico.status === 0) engineUsed = 'pico2wave';
+        }
+      } catch (e) {
+        engineUsed = 'espeak';
+      }
+      writeLog('TTS engine chosen: ' + engineUsed + ' lang=' + lang);
 
       let settled = false;
       const settle = (result) => {
@@ -590,7 +601,27 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
       };
 
       const generate = () => {
-        if (engineUsed === 'pico2wave') {
+        if (engineUsed === 'rhvoice') {
+          // Use RHVoice-test: write text to stdin and let RHVoice produce WAV
+          const rhArgs = ['-p', 'Elena', '-o', tmpFile];
+          writeLog('RHVoice args: ' + JSON.stringify(rhArgs));
+          try {
+            const rh = spawn('RHVoice-test', rhArgs);
+            rh.on('error', (err) => { writeLog('RHVoice spawn error: ' + String(err)); engineUsed = 'espeak'; generate(); });
+            // write text to stdin of RHVoice-test
+            try {
+              rh.stdin.write(sanitized);
+              rh.stdin.end();
+            } catch (werr) {
+              writeLog('RHVoice stdin write failed: ' + String(werr));
+            }
+            rh.on('close', (code) => { if (code !== 0) { writeLog('RHVoice exited with code: ' + code); engineUsed = 'espeak'; generate(); return; } playback(); });
+          } catch (err) {
+            writeLog('RHVoice handling exception: ' + String(err));
+            engineUsed = 'espeak';
+            generate();
+          }
+        } else if (engineUsed === 'pico2wave') {
           const picoArgs = ['-w', tmpFile, sanitized];
           writeLog('pico2wave args: ' + JSON.stringify(picoArgs));
           const pico = spawn('pico2wave', picoArgs);
