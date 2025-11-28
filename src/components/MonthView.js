@@ -18,6 +18,12 @@ const MonthView = ({
   const [outputLang, setOutputLang] = React.useState('ru');
   const [lastTranscript, setLastTranscript] = React.useState('');
   const [lastAnswer, setLastAnswer] = React.useState('');
+  const [devices, setDevices] = React.useState([]);
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState('');
+  const [testing, setTesting] = React.useState(false);
+  const [rms, setRms] = React.useState(0);
+  const analyserRef = React.useRef(null);
+  const audioStreamRef = React.useRef(null);
 
   const handleStartVoice = () => {
     setLastTranscript('');
@@ -49,9 +55,9 @@ const MonthView = ({
           (async () => {
             try {
               setListening(true);
-              const blob = await voiceSearchService.recordAudio({ ms: 7000 });
+              const constraints = selectedDeviceId ? { audio: { deviceId: { exact: selectedDeviceId } } } : { audio: true };
+              const blob = await voiceSearchService.recordAudio({ ms: 7000, constraints });
               setListening(false);
-              try {
                 const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
                 setLastTranscript(transcript || '(no speech detected)');
                 const parsed = safeParse(selectedDate) || new Date();
@@ -88,9 +94,9 @@ const MonthView = ({
       (async () => {
         try {
           setListening(true);
-          const blob = await voiceSearchService.recordAudio({ ms: 7000 });
+          const constraints = selectedDeviceId ? { audio: { deviceId: { exact: selectedDeviceId } } } : { audio: true };
+          const blob = await voiceSearchService.recordAudio({ ms: 7000, constraints });
           setListening(false);
-          try {
             const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
             setLastTranscript(transcript || '(no speech detected)');
             const parsed = safeParse(selectedDate) || new Date();
@@ -233,6 +239,69 @@ const MonthView = ({
           <option value="ru-RU">Русский</option>
           <option value="en-US">English</option>
         </select>
+        {/* Mic device selector & diagnostics */}
+        <label style={{ margin: '0 8px' }}>Mic:</label>
+        <select value={selectedDeviceId} onChange={(e) => setSelectedDeviceId(e.target.value)} style={{ minWidth: 220 }}>
+          <option value="">(default)</option>
+          {devices.map(d => (
+            <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
+          ))}
+        </select>
+        <button className="btn" style={{ marginLeft: 8 }} onClick={async () => {
+          try {
+            // ensure permission so labels appear
+            await navigator.mediaDevices.getUserMedia({ audio: true }).catch(()=>{});
+          } catch(e) {}
+          const list = await navigator.mediaDevices.enumerateDevices();
+          setDevices(list.filter(d => d.kind === 'audioinput'));
+        }}>Refresh mics</button>
+        <button className="btn" style={{ marginLeft: 8 }} disabled={testing} onClick={async () => {
+          setTesting(true);
+          setRms(0);
+          try {
+            const constraints = selectedDeviceId ? { audio: { deviceId: { exact: selectedDeviceId } } } : { audio: true };
+            const stream = await navigator.mediaDevices.getUserMedia(constraints);
+            audioStreamRef.current = stream;
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const src = ctx.createMediaStreamSource(stream);
+            const analyser = ctx.createAnalyser();
+            analyser.fftSize = 2048;
+            src.connect(analyser);
+            analyserRef.current = { analyser, ctx };
+            const data = new Uint8Array(analyser.fftSize);
+            let running = true;
+            const read = () => {
+              if (!running) return;
+              analyser.getByteTimeDomainData(data);
+              let sum = 0;
+              for (let i = 0; i < data.length; i++) {
+                const v = (data[i] - 128) / 128;
+                sum += v * v;
+              }
+              const curRms = Math.sqrt(sum / data.length);
+              setRms(curRms);
+              requestAnimationFrame(read);
+            };
+            read();
+            setTimeout(() => {
+              running = false;
+              try { analyserRef.current.analyser.disconnect(); } catch (e) {}
+              try { analyserRef.current.ctx.close(); } catch (e) {}
+              if (audioStreamRef.current) audioStreamRef.current.getTracks().forEach(t => t.stop());
+              analyserRef.current = null;
+              audioStreamRef.current = null;
+              setTesting(false);
+            }, 4000);
+          } catch (e) {
+            console.warn('mic test failed', e);
+            setTesting(false);
+          }
+        }}>Test mic</button>
+        <div style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 12, width: 120 }}>
+          <div style={{ height: 10, width: '100%', background: '#222', borderRadius: 4 }}>
+            <div style={{ height: 10, width: `${Math.min(1, rms) * 100}%`, background: rms > 0.05 ? '#4caf50' : '#f44336', borderRadius: 4 }} />
+          </div>
+        </div>
         <label style={{ margin: '0 8px' }}>Output:</label>
         <select value={outputLang} onChange={(e) => setOutputLang(e.target.value)}>
           <option value="ru">Russian</option>
