@@ -1,6 +1,5 @@
 import React from 'react';
 import { startOfMonth, endOfMonth, startOfWeek, endOfWeek, addDays, isSameMonth, isSameDay, isToday, startOfDay, endOfDay } from 'date-fns';
-import { safeFormat } from '../utils/dateUtils';
 import './MonthView.css';
 import { voiceSearchService } from '../services/voiceSearchService';
 import { geminiService } from '../services/GeminiService';
