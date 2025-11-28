@@ -25,6 +25,27 @@ const MonthView = ({
   const analyserRef = React.useRef(null);
   const audioStreamRef = React.useRef(null);
 
+  // On mount, try to populate devices so the dropdown isn't empty by default
+  React.useEffect(() => {
+    (async () => {
+      try {
+        // try to get permission so labels are available
+        await navigator.mediaDevices.getUserMedia({ audio: true }).catch(() => {});
+        const list = await navigator.mediaDevices.enumerateDevices();
+        const inputs = list.filter(d => d.kind === 'audioinput').map((d, i) => ({
+          kind: d.kind,
+          label: d.label || '(no label)',
+          deviceId: d.deviceId || `unknown-${i}`,
+          groupId: d.groupId || ''
+        }));
+        console.debug('initial enumerateDevices audioinputs', inputs);
+        setDevices(inputs);
+      } catch (err) {
+        console.warn('initial enumerateDevices failed', err);
+      }
+    })();
+  }, []);
+
   const handleStartVoice = () => {
     setLastTranscript('');
     setLastAnswer('');
@@ -245,8 +266,8 @@ const MonthView = ({
         <label style={{ margin: '0 8px' }}>Mic:</label>
         <select value={selectedDeviceId} onChange={(e) => setSelectedDeviceId(e.target.value)} style={{ minWidth: 220 }}>
           <option value="">(default)</option>
-          {devices.map(d => (
-            <option key={d.deviceId} value={d.deviceId}>{d.label || d.deviceId}</option>
+          {devices.map((d, i) => (
+            <option key={`${d.deviceId}-${i}`} value={d.deviceId}>{`${d.label} — ${d.deviceId}`}</option>
           ))}
         </select>
         <button className="btn" style={{ marginLeft: 8 }} onClick={async () => {
@@ -254,8 +275,21 @@ const MonthView = ({
             // ensure permission so labels appear
             await navigator.mediaDevices.getUserMedia({ audio: true }).catch(()=>{});
           } catch(e) {}
-          const list = await navigator.mediaDevices.enumerateDevices();
-          setDevices(list.filter(d => d.kind === 'audioinput'));
+          try {
+            const list = await navigator.mediaDevices.enumerateDevices();
+            // keep only audioinput and normalize fields; preserve order
+            const inputs = list.filter(d => d.kind === 'audioinput').map((d, i) => ({
+              kind: d.kind,
+              label: d.label || '(no label)',
+              deviceId: d.deviceId || `unknown-${i}`,
+              groupId: d.groupId || ''
+            }));
+            console.debug('enumerateDevices audioinputs', inputs);
+            setDevices(inputs);
+          } catch (err) {
+            console.warn('enumerateDevices failed', err);
+            setDevices([]);
+          }
         }}>Refresh mics</button>
         <button className="btn" style={{ marginLeft: 8 }} disabled={testing} onClick={async () => {
           setTesting(true);
