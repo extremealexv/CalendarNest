@@ -8,6 +8,7 @@ import CalendarView from './components/CalendarView';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AddAccountModal from './components/AddAccountModal';
+import ErrorBoundary from './components/ErrorBoundary';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
 
 // Import services
@@ -302,11 +303,13 @@ function App() {
         onDateChange={handleDateChange}
       />
       {showAddModal && (
-        <AddAccountModal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
-          onComplete={handleAddModalComplete}
-        />
+        <ErrorBoundary>
+          <AddAccountModal
+            isOpen={showAddModal}
+            onClose={() => setShowAddModal(false)}
+            onComplete={handleAddModalComplete}
+          />
+        </ErrorBoundary>
       )}
       <div className="main-content" style={{ padding: '16px' }}>
         <CalendarView

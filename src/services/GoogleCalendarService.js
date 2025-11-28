@@ -225,23 +225,86 @@ class GoogleCalendarService {
       const accountIds = await window.electronAPI.listAccounts();
       const accounts = [];
       for (const id of accountIds) {
-        const tokens = await window.electronAPI.getTokens(id);
+        let tokens = await window.electronAPI.getTokens(id);
         if (!tokens) continue;
         try {
-          const userInfo = await this.fetchUserInfo(tokens.access_token);
-          // Try to read metadata (nickname) from tokens storage if present
-          const rawMeta = tokens.meta || {};
-          const accountData = {
-            id: userInfo.id,
-            email: userInfo.email,
-            name: userInfo.name,
-            nickname: rawMeta.nickname || '',
-            picture: userInfo.picture,
-            tokens: tokens,
-            authenticatedAt: new Date().toISOString()
-          };
-          this.accounts.set(id, accountData);
-          accounts.push(accountData);
+          // Try to validate access token; if expired, attempt refresh using refresh_token
+          try {
+            const userInfo = await this.fetchUserInfo(tokens.access_token);
+            const rawMeta = tokens.meta || {};
+            const accountData = {
+              id: userInfo.id,
+              email: userInfo.email,
+              name: userInfo.name,
+              nickname: rawMeta.nickname || '',
+              picture: userInfo.picture,
+              tokens: tokens,
+              authenticatedAt: new Date().toISOString()
+            };
+            this.accounts.set(id, accountData);
+            accounts.push(accountData);
+            continue;
+          } catch (errFetch) {
+            // If fetch failed due to expired access token, try to refresh
+            console.debug('fetchUserInfo failed for stored token, attempting refresh for', id, errFetch && errFetch.message);
+            if (tokens.refresh_token) {
+              try {
+                if (window.electronAPI && typeof window.electronAPI.refreshAuthToken === 'function') {
+                  const refreshed = await window.electronAPI.refreshAuthToken({ refreshToken: tokens.refresh_token });
+                  if (refreshed && refreshed.success && refreshed.tokens) {
+                    tokens = { ...tokens, ...refreshed.tokens };
+                    // persist updated tokens
+                    try { await window.electronAPI.saveTokens(id, tokens); } catch (e) { console.debug('saveTokens after refresh failed', e); }
+                    const userInfo = await this.fetchUserInfo(tokens.access_token);
+                    const rawMeta = tokens.meta || {};
+                    const accountData = {
+                      id: userInfo.id,
+                      email: userInfo.email,
+                      name: userInfo.name,
+                      nickname: rawMeta.nickname || '',
+                      picture: userInfo.picture,
+                      tokens: tokens,
+                      authenticatedAt: new Date().toISOString()
+                    };
+                    this.accounts.set(id, accountData);
+                    accounts.push(accountData);
+                    continue;
+                  }
+                } else {
+                  // No main-process refresh available; try client-side refresh flow
+                  const body = new URLSearchParams({
+                    client_id: process.env.REACT_APP_GOOGLE_CLIENT_ID,
+                    grant_type: 'refresh_token',
+                    refresh_token: tokens.refresh_token
+                  });
+                  const resp = await fetch('https://oauth2.googleapis.com/token', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: body.toString() });
+                  if (resp.ok) {
+                    const newTokens = await resp.json();
+                    tokens = { ...tokens, ...newTokens };
+                    try { await window.electronAPI.saveTokens(id, tokens); } catch (e) { console.debug('saveTokens after client refresh failed', e); }
+                    const userInfo = await this.fetchUserInfo(tokens.access_token);
+                    const rawMeta = tokens.meta || {};
+                    const accountData = {
+                      id: userInfo.id,
+                      email: userInfo.email,
+                      name: userInfo.name,
+                      nickname: rawMeta.nickname || '',
+                      picture: userInfo.picture,
+                      tokens: tokens,
+                      authenticatedAt: new Date().toISOString()
+                    };
+                    this.accounts.set(id, accountData);
+                    accounts.push(accountData);
+                    continue;
+                  }
+                }
+              } catch (refreshErr) {
+                console.warn('Refresh for stored token failed for', id, refreshErr);
+              }
+            }
+            // if refresh not possible or failed, fall through to skip this account
+            console.warn('Failed to validate stored token for', id, errFetch && errFetch.message);
+          }
         } catch (err) {
           console.warn('Failed to validate stored token for', id, err);
         }
