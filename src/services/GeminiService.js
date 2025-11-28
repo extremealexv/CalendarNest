@@ -75,14 +75,6 @@ Return a JSON object with the following structure:
 Important parsing rules:
 - Default duration is 1 hour if not specified
 - "Tomorrow" means the day after today
-- "Next week" means 7 days from today
-- Relative days like "Monday" refer to the next occurrence
-- Business hours default: 9 AM - 5 PM
-- Extract participant names and match to available accounts
-- Be conservative with confidence scores
-- If ambiguous, ask for clarification in the title field
-
-Only return the JSON object, no other text.
 `;
 
       const result = await this.model.generateContent(prompt);
@@ -117,11 +109,13 @@ Only return the JSON object, no other text.
   const languageInstruction = lang.startsWith('ru') ? 'Please write the summary in Russian.' : 'Please write the summary in English.';
   const dateRange = `${safeFormat(startDate, 'MMM d', '')} - ${safeFormat(endDate, 'MMM d, yyyy', '')}`;
       
-      // Prepare events data for analysis
+      // Prepare events data for analysis — include isAllDay and description so the model can decide whether an event is informational
       const eventsData = events.map(event => ({
         title: event.summary || event.title,
+        description: event.description || event.notes || '',
         start: event.start?.dateTime || event.start?.date,
         end: event.end?.dateTime || event.end?.date,
+        isAllDay: !!(event.start && event.start.date && !event.start.dateTime),
         account: event.accountName || event.accountEmail
       }));
 
@@ -136,6 +130,8 @@ Accounts: ${accounts.map(acc => acc.name).join(', ')}
 
 Events:
 ${JSON.stringify(eventsData, null, 2)}
+
+Important: Treat all-day informational events (for example: public holidays, lunar phases like "full moon", day-of-year markers such as "100th day", observances, or calendar items whose title/description indicate they are informational) as non-blocking. These informational all-day entries do not prevent scheduling other events and should not be counted as "busy" time. Only treat explicit unavailability all-day events (words like "vacation", "out of office", "unavailable", "busy", "blocked") as blocking.
 
 Provide a conversational summary including:
 1. Who has the busiest schedule
@@ -155,9 +151,26 @@ Keep the response friendly and family-focused, under 180 words.
       console.error('Availability summary generation failed:', error);
   // Fallback: produce a simple local summary when Gemini model/method isn't available
       try {
-        // Aggregate events per account
+        // Helper to detect informational all-day events we should ignore for "busy" calculations
+        const isInformationalAllDay = (ev) => {
+          try {
+            const isAllDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
+            if (!isAllDay) return false;
+            const title = (ev.summary || ev.title || '').toLowerCase();
+            const desc = (ev.description || ev.notes || '').toLowerCase();
+            // Exclusion: if explicitly unavailable, treat as blocking
+            const blocking = ['vacation', 'out of office', 'unavailable', 'busy', 'blocked', 'holiday - closed'];
+            for (const b of blocking) if (title.includes(b) || desc.includes(b)) return false;
+            const infoKeywords = ['holiday', 'full moon', 'moon', 'day of year', 'observance', 'eclipse', 'phase', 'anniversary'];
+            for (const k of infoKeywords) if (title.includes(k) || desc.includes(k)) return true;
+            return false;
+          } catch (e) { return false; }
+        };
+
+        // Aggregate events per account, ignoring informational all-day events for "busy" calculations
         const counts = {};
         (events || []).forEach(ev => {
+          if (isInformationalAllDay(ev)) return;
           const acct = ev.accountName || ev.accountEmail || 'Unknown';
           counts[acct] = (counts[acct] || 0) + 1;
         });
@@ -170,6 +183,7 @@ Keep the response friendly and family-focused, under 180 words.
         // Find free hours between 9-17 with fewest events
         const hourCounts = Array.from({ length: 24 }, () => 0);
         (events || []).forEach(ev => {
+          if (isInformationalAllDay(ev)) return;
           const start = ev.start?.dateTime || ev.start?.date;
           const end = ev.end?.dateTime || ev.end?.date;
           let s = start ? new Date(start) : null;
@@ -187,6 +201,7 @@ Keep the response friendly and family-focused, under 180 words.
 
         // Weekend availability
         const weekendEvents = (events || []).filter(ev => {
+          if (isInformationalAllDay(ev)) return false;
           const s = ev.start?.dateTime || ev.start?.date;
           if (!s) return false;
           const d = new Date(s);
@@ -197,12 +212,12 @@ Keep the response friendly and family-focused, under 180 words.
         if (lang && lang.startsWith('ru')) {
           summaryParts.push(`Самая занятая запись: ${busiest}`);
           if (best.length) summaryParts.push(`Подходящее время для встреч: ${best.join(', ')}`);
-          summaryParts.push(`Всего событий: ${(events || []).length}`);
+          summaryParts.push(`Всего событий: ${(events || []).filter(e=>!isInformationalAllDay(e)).length}`);
           summaryParts.push(weekendEvents.length ? `Есть ${weekendEvents.length} событий в выходные.` : 'Выходные в основном свободны.');
         } else {
           summaryParts.push(`Busiest calendar: ${busiest}`);
           if (best.length) summaryParts.push(`Good meeting times: ${best.join(', ')}`);
-          summaryParts.push(`${(events || []).length} events in the selected range.`);
+          summaryParts.push(`${(events || []).filter(e=>!isInformationalAllDay(e)).length} events in the selected range.`);
           summaryParts.push(weekendEvents.length ? `There are ${weekendEvents.length} weekend events.` : 'Weekend looks mostly free.');
         }
 
@@ -221,10 +236,13 @@ Keep the response friendly and family-focused, under 180 words.
     }
 
     try {
+      // Include isAllDay and description so Gemini can decide whether an event is informational
       const eventsContext = events.map(e => ({
         title: e.summary || e.title,
+        description: e.description || '',
         start: e.start?.dateTime || e.start?.date,
         end: e.end?.dateTime || e.end?.date,
+        isAllDay: !!(e.start && e.start.date && !e.start.dateTime),
         account: e.accountName
       }));
 
@@ -234,14 +252,13 @@ Based on the query "${query}" and the following calendar information, suggest 3 
 Accounts: ${accounts.map(acc => acc.name).join(', ')}
 Current Events: ${JSON.stringify(eventsContext, null, 2)}
 
+Important: When determining availability, ignore informational all-day events (examples: public holidays, lunar phases like "full moon", day-of-year markers, or calendar items titled like "Holiday: ..."). These informational all-day entries should NOT be treated as busy time. Only treat explicit unavailability all-day events (containing words like "vacation", "out of office", "unavailable", "busy", "blocked") as blocking.
+
 Preferences:
 - Preferred duration: ${preferences.duration || '1 hour'}
 - Preferred time of day: ${preferences.timeOfDay || 'business hours'}
 - Avoid weekends: ${preferences.avoidWeekends || false}
 
-Respond with a JSON array of suggestions:
-[
-  {
     "date": "YYYY-MM-DD",
     "startTime": "HH:mm",
     "endTime": "HH:mm", 
