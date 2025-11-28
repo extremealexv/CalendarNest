@@ -299,7 +299,9 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
       try {
         if (process.platform === 'linux') {
           console.log('Attempting to show OS virtual keyboard for auth window');
-          tryStartOsKeyboard();
+          const p = tryStartOsKeyboard();
+          // Try again after a short delay in case the first spawn didn't attach to the display
+          setTimeout(() => { try { if (!p) tryStartOsKeyboard(); } catch (e) {} }, 600);
         }
       } catch (e) { console.error('show OS keyboard attempt failed', e); }
 
@@ -460,6 +462,31 @@ const tryStartOsKeyboard = () => {
       p.unref();
       osKeyboardProc = p;
       console.log('Launched OS keyboard:', c.cmd, 'env.DISPLAY=', env.DISPLAY, 'XAUTHORITY=', env.XAUTHORITY);
+
+      // Best-effort: try to raise the OS keyboard window to the front using wmctrl/xdotool
+      try {
+        const { spawn: spawn2 } = require('child_process');
+        setTimeout(() => {
+          try {
+            // Try wmctrl first (use common title variants)
+            try { spawn2('wmctrl', ['-a', c.cmd]); } catch (e) {}
+            try { spawn2('wmctrl', ['-a', 'Onboard']); } catch (e) {}
+            // Try xdotool as alternative: search by name and activate
+            try {
+              const xdSearch = spawn2('xdotool', ['search', '--name', c.cmd]);
+              let out = '';
+              xdSearch.stdout && xdSearch.stdout.on('data', d => out += d.toString());
+              xdSearch.on('close', () => {
+                if (out.trim()) {
+                  const id = out.trim().split(/\s+/)[0];
+                  try { spawn2('xdotool', ['windowactivate', id]); } catch (e) {}
+                }
+              });
+            } catch (e) {}
+          } catch (e) { console.debug('raise OS keyboard attempt failed', e); }
+        }, 300);
+      } catch (e) {}
+
       return osKeyboardProc;
     } catch (e) {
       // try next
