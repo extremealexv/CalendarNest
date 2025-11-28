@@ -261,7 +261,7 @@ function App() {
   // Auto-refresh calendar data every minute while authenticated
   useEffect(() => {
     if (!isAuthenticated || !accounts || accounts.length === 0) return;
-    console.debug('[App] starting calendar auto-refresh (60s)');
+    console.debug('[App] starting calendar auto-refresh (5m)');
     const id = setInterval(() => {
       try {
         console.debug('[App] auto-refresh: loading calendar data');
@@ -269,7 +269,7 @@ function App() {
       } catch (err) {
         console.error('[App] auto-refresh failed', err);
       }
-    }, 60 * 1000);
+    }, 5 * 60 * 1000); // 5 minutes
     return () => {
       clearInterval(id);
       console.debug('[App] stopped calendar auto-refresh');

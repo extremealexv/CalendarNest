@@ -21,30 +21,44 @@ const DayView = ({
   const scheduleRef = useRef(null);
   const touchState = useRef({ startY: 0, startScroll: 0, isDragging: false });
 
+  // Use renderer-normalized parsedStart/parsedEnd/allDay fields that GoogleCalendarService provides
   const dayEvents = events.filter(event => {
-    const eventStart = safeParse(event.start?.dateTime || event.start?.date);
+    const eventStart = event.parsedStart || safeParse(event.start?.dateTime || event.start?.date);
+    const eventEnd = event.parsedEnd || safeParse(event.end?.dateTime || event.end?.date);
     if (!eventStart) return false;
-    return isSameDay(eventStart, parsedSelected);
+    // Include if event overlaps the selected day (inclusive)
+    try {
+      const dayStart = new Date(parsedSelected);
+      dayStart.setHours(0,0,0,0);
+      const dayEnd = new Date(parsedSelected);
+      dayEnd.setHours(23,59,59,999);
+      if (eventEnd && (eventEnd < dayStart || eventStart > dayEnd)) return false;
+      return true;
+    } catch (e) {
+      return isSameDay(eventStart, parsedSelected);
+    }
   });
 
   const getAllDayEvents = () => {
-    return dayEvents.filter(event => 
-      event.start?.date && !event.start?.dateTime
-    );
+    return dayEvents.filter(event => event.allDay === true);
   };
 
   const getTimedEvents = () => {
-    return dayEvents.filter(event => 
-      event.start?.dateTime
-    );
+    return dayEvents.filter(event => !event.allDay);
   };
 
   const getEventsForHour = (hour) => {
     return getTimedEvents().filter(event => {
-      const eventStart = safeParse(event.start.dateTime);
-      const eventEnd = safeParse(event.end.dateTime);
+      const eventStart = event.parsedStart || safeParse(event.start?.dateTime);
+      const eventEnd = event.parsedEnd || safeParse(event.end?.dateTime);
       if (!eventStart || !eventEnd) return false;
-      return eventStart.getHours() <= hour && eventEnd.getHours() > hour;
+      // Hour interval [hour:00, hour+1:00)
+      const slotStart = new Date(eventStart);
+      slotStart.setHours(hour, 0, 0, 0);
+      const slotEnd = new Date(slotStart);
+      slotEnd.setHours(hour + 1, 0, 0, 0);
+      // Overlaps if eventStart < slotEnd && eventEnd > slotStart
+      return (eventStart < slotEnd) && (eventEnd > slotStart);
     });
   };
 
