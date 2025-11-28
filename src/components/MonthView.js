@@ -22,10 +22,12 @@ const MonthView = ({
   const handleStartVoice = () => {
     setLastTranscript('');
     setLastAnswer('');
-    // Try Web Speech API recognition
+    // Try Web Speech API recognition; if it fails or produces no transcript, fall back to recording+VOSK
+    const waitingRef = { current: false };
     const res = voiceSearchService.startRecognition({
       lang: inputLang,
       onResult: async (text) => {
+        waitingRef.current = false;
         setLastTranscript(text);
         setListening(false);
         try {
@@ -40,22 +42,57 @@ const MonthView = ({
           setLastAnswer('Error: ' + (err.message || String(err)));
         }
       },
-      onEnd: () => { setListening(false); }
+      onEnd: () => {
+        // If recognition ended without producing a result, fallback to recording+VOSK
+        if (waitingRef.current) {
+          // perform fallback
+          (async () => {
+            try {
+              setListening(true);
+              const blob = await voiceSearchService.recordAudio({ ms: 7000 });
+              setListening(false);
+              try {
+                const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
+                setLastTranscript(transcript || '(no speech detected)');
+                const parsed = safeParse(selectedDate) || new Date();
+                const start = new Date(parsed);
+                start.setDate(1); start.setHours(0,0,0,0);
+                const end = new Date(start); end.setMonth(end.getMonth()+1); end.setHours(23,59,59,999);
+                const answer = await voiceSearchService.handleQueryText(transcript || '', { events, accounts, startDate: start, endDate: end, lang: outputLang, onAnswerText: (t) => setLastAnswer(t) });
+                setLastAnswer(answer);
+              } catch (transErr) {
+                console.warn('VOSK transcription failed', transErr);
+                setLastTranscript('Recorded audio available but transcription failed: ' + (transErr && transErr.message ? transErr.message : String(transErr)));
+              }
+            } catch (e) {
+              setListening(false);
+              setLastTranscript('Microphone capture failed: ' + (e.message || String(e)));
+            }
+          })();
+        }
+        setListening(false);
+      }
     });
     if (res && res.supported) {
+      waitingRef.current = true;
       setListening(true);
+      // safety: if no result after X ms, trigger fallback
+      setTimeout(() => {
+        if (waitingRef.current) {
+          // stop recognition and fallback will run in onEnd
+          try { voiceSearchService.stopRecognition(); } catch (e) { console.debug('stopRecognition failed', e); }
+        }
+      }, 8000);
     } else {
-      // fallback: try MediaRecorder capture
+      // immediate fallback: MediaRecorder -> VOSK
       (async () => {
         try {
           setListening(true);
           const blob = await voiceSearchService.recordAudio({ ms: 7000 });
           setListening(false);
-          // Try local VOSK server transcription
           try {
             const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
             setLastTranscript(transcript || '(no speech detected)');
-            // determine month range
             const parsed = safeParse(selectedDate) || new Date();
             const start = new Date(parsed);
             start.setDate(1); start.setHours(0,0,0,0);
