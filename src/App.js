@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { startOfDay, endOfDay, startOfWeek, endOfWeek, startOfMonth, endOfMonth } from 'date-fns';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import './App.css';
 
@@ -56,7 +57,7 @@ function App() {
       if (existingAuth && existingAuth.length > 0) {
         setAccounts(existingAuth);
         setIsAuthenticated(true);
-        await loadCalendarData(existingAuth);
+        await loadCalendarData(existingAuth, selectedDate, currentView);
       } else {
   // no existing authentication
       }
@@ -68,16 +69,41 @@ function App() {
     }
   };
 
-  const loadCalendarData = async (authenticatedAccounts) => {
+  const loadCalendarData = async (authenticatedAccounts, date = selectedDate, view = currentView) => {
     try {
       setLoading(true);
       const allEvents = [];
-      
+
+      // determine range based on view
+      let rangeStart;
+      let rangeEnd;
+      try {
+        const parsed = date || new Date();
+        switch (view) {
+          case 'day':
+            rangeStart = startOfDay(parsed);
+            rangeEnd = endOfDay(parsed);
+            break;
+          case 'week':
+            rangeStart = startOfWeek(parsed);
+            rangeEnd = endOfWeek(parsed);
+            break;
+          case 'month':
+          default:
+            rangeStart = startOfMonth(parsed);
+            rangeEnd = endOfMonth(parsed);
+            break;
+        }
+      } catch (err) {
+        rangeStart = startOfMonth(new Date());
+        rangeEnd = endOfMonth(new Date());
+      }
+
       for (const account of authenticatedAccounts) {
-        const accountEvents = await googleCalendarService.getEvents(account.id, selectedDate);
+        const accountEvents = await googleCalendarService.getEvents(account.id, rangeStart, rangeEnd);
         allEvents.push(...accountEvents);
       }
-      
+
       setEvents(allEvents);
     } catch (error) {
       console.error('Failed to load calendar data:', error);
@@ -90,7 +116,7 @@ function App() {
     const updatedAccounts = [...accounts, newAccount];
     setAccounts(updatedAccounts);
     setIsAuthenticated(true);
-    await loadCalendarData(updatedAccounts);
+    await loadCalendarData(updatedAccounts, selectedDate, currentView);
   };
 
   const handleLogout = async (accountId) => {
@@ -103,7 +129,7 @@ function App() {
         setIsAuthenticated(false);
         setEvents([]);
       } else {
-        await loadCalendarData(updatedAccounts);
+        await loadCalendarData(updatedAccounts, selectedDate, currentView);
       }
     } catch (error) {
       console.error('Failed to logout:', error);
@@ -111,7 +137,11 @@ function App() {
   };
 
   const handleViewChange = (view) => {
+    // update view and reload data for the current selected date in the new view
     setCurrentView(view);
+    if (isAuthenticated && accounts.length > 0) {
+      loadCalendarData(accounts, selectedDate, view);
+    }
   };
 
   const handleAddAccount = async () => {
@@ -243,7 +273,8 @@ function App() {
   const handleDateChange = (date) => {
     setSelectedDate(date);
     if (isAuthenticated && accounts.length > 0) {
-      loadCalendarData(accounts);
+      // load calendar data for the new selected date and current view
+      loadCalendarData(accounts, date, currentView);
     }
   };
 
@@ -265,7 +296,7 @@ function App() {
     const id = setInterval(() => {
       try {
         console.debug('[App] auto-refresh: loading calendar data');
-        loadCalendarData(accounts);
+        loadCalendarData(accounts, selectedDate, currentView);
       } catch (err) {
         console.error('[App] auto-refresh failed', err);
       }
