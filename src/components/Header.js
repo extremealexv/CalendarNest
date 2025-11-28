@@ -1,6 +1,7 @@
 import React from 'react';
 import { format } from 'date-fns';
 import { safeFormat, safeParse } from '../utils/dateUtils';
+import { addDays, addMonths } from 'date-fns';
 import './Header.css';
 
 const Header = ({ 
@@ -16,18 +17,20 @@ const Header = ({
   const [editingId, setEditingId] = React.useState(null);
   const [editingValue, setEditingValue] = React.useState('');
   const handleDateNavigation = (direction) => {
-  const newDate = safeParse(selectedDate) || new Date();
-    
+    const base = safeParse(selectedDate) || new Date();
+    // clone to avoid mutating parent state
+    const newDate = new Date(base.getTime());
+
     switch (currentView) {
       case 'day':
-        newDate.setDate(newDate.getDate() + direction);
-        break;
+        onDateChange(addDays(newDate, direction));
+        return;
       case 'week':
-        newDate.setDate(newDate.getDate() + (direction * 7));
-        break;
+        onDateChange(addDays(newDate, direction * 7));
+        return;
       case 'month':
-        newDate.setMonth(newDate.getMonth() + direction);
-        break;
+        onDateChange(addMonths(newDate, direction));
+        return;
       default:
         break;
     }
