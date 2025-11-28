@@ -371,6 +371,50 @@ Only return the JSON array.
       return null;
     }
   }
+
+  // Answer a free-form query about the calendar using events as context
+  async answerQuery(query, events, accounts, startDate, endDate, options = {}) {
+    if (!this.initialize()) {
+      throw new Error('Gemini AI not available');
+    }
+
+    try {
+      const lang = (options.lang || 'ru').toLowerCase();
+      const languageInstruction = lang.startsWith('ru') ? 'Please answer in Russian.' : 'Please answer in English.';
+      const dateRange = startDate && endDate ? `${safeFormat(startDate, 'MMM d', '')} - ${safeFormat(endDate, 'MMM d, yyyy', '')}` : 'current date range';
+
+      const eventsData = (events || []).map(event => ({
+        title: event.summary || event.title,
+        description: event.description || '',
+        start: event.start?.dateTime || event.start?.date,
+        end: event.end?.dateTime || event.end?.date,
+        isAllDay: !!(event.start && event.start.date && !event.start.dateTime),
+        account: event.accountName || event.accountEmail
+      }));
+
+      const prompt = `
+${languageInstruction}
+You are given a user's calendar data and a question. Answer the question concisely and in a way suitable for TTS (short clear sentences).
+
+Date Range: ${dateRange}
+Accounts: ${accounts.map(acc => acc.name).join(', ')}
+
+Events:
+${JSON.stringify(eventsData, null, 2)}
+
+Question: "${query}"
+
+Respond with plain text only, suitable for speech synthesis. Keep the answer under 200 words.
+`;
+
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      return response.text();
+    } catch (error) {
+      console.error('Answer query failed:', error);
+      throw new Error('Failed to answer query');
+    }
+  }
 }
 
 export const geminiService = new GeminiService();
