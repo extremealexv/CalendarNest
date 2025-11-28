@@ -58,6 +58,7 @@ const MonthView = ({
               const constraints = selectedDeviceId ? { audio: { deviceId: { exact: selectedDeviceId } } } : { audio: true };
               const blob = await voiceSearchService.recordAudio({ ms: 7000, constraints });
               setListening(false);
+              try {
                 const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
                 setLastTranscript(transcript || '(no speech detected)');
                 const parsed = safeParse(selectedDate) || new Date();
@@ -97,6 +98,7 @@ const MonthView = ({
           const constraints = selectedDeviceId ? { audio: { deviceId: { exact: selectedDeviceId } } } : { audio: true };
           const blob = await voiceSearchService.recordAudio({ ms: 7000, constraints });
           setListening(false);
+          try {
             const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
             setLastTranscript(transcript || '(no speech detected)');
             const parsed = safeParse(selectedDate) || new Date();
