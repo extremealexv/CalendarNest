@@ -260,11 +260,14 @@ const MonthView = ({
         <button className="btn" style={{ marginLeft: 8 }} disabled={testing} onClick={async () => {
           setTesting(true);
           setRms(0);
+          setLastTranscript('Testing microphone...');
           try {
             const constraints = selectedDeviceId ? { audio: { deviceId: { exact: selectedDeviceId } } } : { audio: true };
             const stream = await navigator.mediaDevices.getUserMedia(constraints);
             audioStreamRef.current = stream;
             const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            // Some Chromium builds start AudioContext in "suspended" state; resume explicitly.
+            try { await ctx.resume(); } catch (e) { console.debug('AudioContext.resume() failed or not needed', e); }
             const src = ctx.createMediaStreamSource(stream);
             const analyser = ctx.createAnalyser();
             analyser.fftSize = 2048;
@@ -274,7 +277,13 @@ const MonthView = ({
             let running = true;
             const read = () => {
               if (!running) return;
-              analyser.getByteTimeDomainData(data);
+              try {
+                analyser.getByteTimeDomainData(data);
+              } catch (err) {
+                console.warn('analyser.getByteTimeDomainData failed', err);
+                running = false;
+                return;
+              }
               let sum = 0;
               for (let i = 0; i < data.length; i++) {
                 const v = (data[i] - 128) / 128;
@@ -285,17 +294,25 @@ const MonthView = ({
               requestAnimationFrame(read);
             };
             read();
+            // stop after a short interval and report results
             setTimeout(() => {
               running = false;
-              try { analyserRef.current.analyser.disconnect(); } catch (e) {}
-              try { analyserRef.current.ctx.close(); } catch (e) {}
+              try { analyserRef.current && analyserRef.current.analyser && analyserRef.current.analyser.disconnect(); } catch (e) { console.debug('disconnect failed', e); }
+              try { analyserRef.current && analyserRef.current.ctx && analyserRef.current.ctx.close(); } catch (e) { console.debug('ctx.close failed', e); }
               if (audioStreamRef.current) audioStreamRef.current.getTracks().forEach(t => t.stop());
               analyserRef.current = null;
               audioStreamRef.current = null;
               setTesting(false);
+              // If RMS too low, surface a helpful hint
+              if (rms <= 0.001) {
+                setLastTranscript('Mic test finished — no audio detected (RMS≈0). Check mic, ALSA/PulseAudio, or try another device.');
+              } else {
+                setLastTranscript('Mic test finished — audio detected.');
+              }
             }, 4000);
           } catch (e) {
             console.warn('mic test failed', e);
+            setLastTranscript('Mic test failed: ' + (e && e.message ? e.message : String(e)));
             setTesting(false);
           }
         }}>Test mic</button>
@@ -312,6 +329,34 @@ const MonthView = ({
         <button className="btn" onClick={handleStartVoice} disabled={listening} style={{ marginLeft: 12 }}>
           {listening ? 'Listening…' : 'Voice Search'}
         </button>
+        <button className="btn" style={{ marginLeft: 8 }} onClick={async () => {
+          // Capture a system-level sample via main process (arecord/ffmpeg) and transcribe via local VOSK
+          try {
+            setLastTranscript('Recording system sample...');
+            const res = await (window.electronAPI && window.electronAPI.captureSystemSample ? window.electronAPI.captureSystemSample({ durationMs: 5000, device: '' }) : Promise.resolve({ success: false, error: 'IPC not available' }));
+            if (!res || !res.success) {
+              setLastTranscript('System capture failed: ' + (res && res.error ? res.error : 'unknown'));
+              return;
+            }
+            // convert base64 to Blob
+            const b64 = res.data;
+            const binary = atob(b64);
+            const len = binary.length;
+            const bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) bytes[i] = binary.charCodeAt(i);
+            const blob = new Blob([bytes.buffer], { type: res.mime || 'audio/wav' });
+            setLastTranscript('Uploading system sample for transcription...');
+            try {
+              const transcript = await voiceSearchService.transcribeWithServer(blob, 'http://localhost:5000/transcribe');
+              setLastTranscript(transcript || '(no speech detected)');
+            } catch (tErr) {
+              setLastTranscript('Transcription failed: ' + (tErr && tErr.message ? tErr.message : String(tErr)));
+            }
+          } catch (err) {
+            console.warn('system capture failed', err);
+            setLastTranscript('System capture failed: ' + (err && err.message ? err.message : String(err)));
+          }
+        }}>Capture (system)</button>
         <div className="voice-results" style={{ marginTop: 8 }}>
           {lastTranscript ? (<div><strong>Heard:</strong> {lastTranscript}</div>) : null}
           {lastAnswer ? (<div><strong>Answer:</strong> {lastAnswer}</div>) : null}

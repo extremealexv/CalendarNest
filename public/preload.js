@@ -22,6 +22,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   showOsKeyboard: () => ipcRenderer.invoke('show-os-keyboard'),
   hideOsKeyboard: () => ipcRenderer.invoke('hide-os-keyboard')
   ,
+  // System-level audio capture fallback (records via arecord/ffmpeg on the host)
+  captureSystemSample: (opts = {}) => ipcRenderer.invoke('system-capture', opts)
+  ,
   // Allow renderer to write a short message to main process log for diagnostics
   rendererLog: (msg) => ipcRenderer.invoke('renderer-log', { message: String(msg) })
 });

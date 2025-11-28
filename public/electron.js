@@ -386,6 +386,53 @@ ipcMain.handle('list-accounts', async () => {
   return Object.keys(all);
 });
 
+// System-level capture: spawn arecord or ffmpeg to record a short sample and return base64 WAV
+ipcMain.handle('system-capture', async (event, { durationMs = 5000, device = '' } = {}) => {
+  const { spawnSync } = require('child_process');
+  const outPath = path.join(app.getPath('temp'), `famsync_syscap_${Date.now()}.wav`);
+  const seconds = Math.max(1, Math.round((durationMs || 5000) / 1000));
+
+  // Try arecord first
+  try {
+    const arecordArgs = [];
+    if (device) arecordArgs.push('-D', device);
+    arecordArgs.push('-f', 'S16_LE', '-r', '16000', '-c', '1', '-d', String(seconds), outPath);
+    const res = spawnSync('arecord', arecordArgs, { encoding: 'utf8', stdio: 'inherit' });
+    if (res.error) throw res.error;
+    // read file and return base64
+    if (fs.existsSync(outPath)) {
+      const buf = fs.readFileSync(outPath);
+      try { fs.unlinkSync(outPath); } catch (e) {}
+      return { success: true, mime: 'audio/wav', data: buf.toString('base64') };
+    }
+  } catch (e) {
+    console.debug('arecord capture failed, will try ffmpeg:', e && e.message ? e.message : e);
+  }
+
+  // Fallback to ffmpeg ALSA capture
+  try {
+    const ffArgs = [];
+    if (device) {
+      // ffmpeg ALSA input device syntax: -f alsa -i hw:0,0
+      ffArgs.push('-f', 'alsa', '-i', device);
+    } else {
+      ffArgs.push('-f', 'alsa', '-i', 'default');
+    }
+    ffArgs.push('-t', String(seconds), '-ar', '16000', '-ac', '1', outPath);
+    const res2 = spawnSync('ffmpeg', ffArgs, { encoding: 'utf8' });
+    if (res2.error) throw res2.error;
+    if (fs.existsSync(outPath)) {
+      const buf = fs.readFileSync(outPath);
+      try { fs.unlinkSync(outPath); } catch (e) {}
+      return { success: true, mime: 'audio/wav', data: buf.toString('base64') };
+    }
+  } catch (e) {
+    console.error('ffmpeg capture failed', e);
+  }
+
+  return { success: false, error: 'System capture failed: arecord/ffmpeg unavailable or failed' };
+});
+
 // Save account metadata (e.g., nickname) merged with tokens file
 ipcMain.handle('save-account-meta', async (event, { accountId, meta }) => {
   try {
