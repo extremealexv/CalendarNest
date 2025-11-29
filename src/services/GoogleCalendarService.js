@@ -414,11 +414,27 @@ class GoogleCalendarService {
 
   async getEvents(accountId, startDate, endDate) {
     // Do not mutate caller-provided Date objects — clone when present
-    const start = startDate ? new Date(startDate) : new Date();
-    // If caller didn't provide a specific range, default to the month of `start`
-    start.setDate(1);
-    const end = endDate ? new Date(endDate) : new Date(start);
-    end.setMonth(end.getMonth() + 1);
+    // If caller provided explicit startDate/endDate, use them as-is (local time).
+    // Otherwise default to the month window containing today.
+    let start;
+    let end;
+    if (startDate && endDate) {
+      start = new Date(startDate);
+      end = new Date(endDate);
+    } else if (startDate && !endDate) {
+      // Use provided startDate and default end to end of that day
+      start = new Date(startDate);
+      end = new Date(start);
+      end.setHours(23, 59, 59, 999);
+    } else {
+      // No explicit range provided — default to the current month
+      start = new Date();
+      start.setDate(1);
+      start.setHours(0, 0, 0, 0);
+      end = new Date(start);
+      end.setMonth(end.getMonth() + 1);
+      end.setHours(23, 59, 59, 999);
+    }
 
     const calendars = await this.getCalendars(accountId);
     const allEvents = [];
