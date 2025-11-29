@@ -1,4 +1,5 @@
 // Google Calendar API Integration using browser-friendly PKCE flow and fetch
+import { parseISO } from 'date-fns';
 const TOKEN_ENDPOINT = 'https://oauth2.googleapis.com/token';
 const CALENDAR_API_BASE = 'https://www.googleapis.com/calendar/v3';
 
@@ -412,9 +413,11 @@ class GoogleCalendarService {
   }
 
   async getEvents(accountId, startDate, endDate) {
-    const start = startDate || new Date();
+    // Do not mutate caller-provided Date objects — clone when present
+    const start = startDate ? new Date(startDate) : new Date();
+    // If caller didn't provide a specific range, default to the month of `start`
     start.setDate(1);
-    const end = endDate || new Date(start);
+    const end = endDate ? new Date(endDate) : new Date(start);
     end.setMonth(end.getMonth() + 1);
 
     const calendars = await this.getCalendars(accountId);
@@ -459,13 +462,27 @@ class GoogleCalendarService {
           // Compute canonical parsed dates for renderer
           const parseDate = (v) => {
             if (!v) return null;
-            if (v instanceof Date) return v;
-            try {
-              const d = new Date(v);
-              return isNaN(d.getTime()) ? null : d;
-            } catch (err) {
-              return null;
+            if (v instanceof Date) return isNaN(v.getTime()) ? null : v;
+            if (typeof v === 'number') {
+              const dn = new Date(v);
+              return isNaN(dn.getTime()) ? null : dn;
             }
+            if (typeof v === 'string') {
+              // Prefer ISO parsing to avoid timezone surprises for date-only strings
+              try {
+                const iso = parseISO(v);
+                if (!isNaN(iso.getTime())) return iso;
+              } catch (e) {
+                // fall through to Date fallback
+              }
+              try {
+                const d = new Date(v);
+                return isNaN(d.getTime()) ? null : d;
+              } catch (err) {
+                return null;
+              }
+            }
+            return null;
           };
 
           const parsedStart = parseDate(e.start?.dateTime || e.start?.date);

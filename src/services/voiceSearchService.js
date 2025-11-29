@@ -1,6 +1,7 @@
 // voiceSearchService: handles microphone capture (Web Speech API + MediaRecorder fallback)
 import { geminiService } from './GeminiService';
 import { speak } from './ttsService';
+import { googleCalendarService } from './GoogleCalendarService';
 
 const defaultLang = 'ru';
 
@@ -99,7 +100,42 @@ class VoiceSearchService {
   async handleQueryText(text, { events = [], accounts = [], startDate, endDate, lang = defaultLang, onAnswerText, onTtsDone } = {}) {
     try {
       // prefer language code mapped for Gemini service
-      const answer = await geminiService.answerQuery(text, events, accounts, startDate, endDate, { lang });
+      // If the user asks for the "next" occurrence (next appointment / when is my next ...),
+      // we may need to look further ahead than the currently loaded `events` array.
+      const nextQueryRegex = /\b(next|when is my next|next appointment|next .*appointment|when is my)\b/i;
+      let effectiveEvents = events || [];
+
+      if (nextQueryRegex.test(text) && accounts && accounts.length) {
+        try {
+          // Determine a broad future window to search (12 months ahead)
+          const now = new Date();
+          const lookahead = new Date(now);
+          lookahead.setMonth(lookahead.getMonth() + 12);
+
+          // Fetch additional events per account and merge
+          const fetched = [];
+          for (const acct of accounts) {
+            try {
+              const evs = await googleCalendarService.getEvents(acct.id, now, lookahead);
+              if (evs && evs.length) fetched.push(...evs);
+            } catch (e) {
+              // ignore per-account failures
+              console.warn('[voiceSearch] prefetch events failed for', acct.id, e && e.message);
+            }
+          }
+          if (fetched.length) {
+            // Merge de-duplicated by event id
+            const map = new Map();
+            (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
+            fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
+            effectiveEvents = Array.from(map.values());
+          }
+        } catch (prefErr) {
+          console.warn('[voiceSearch] failed to prefetch extended events', prefErr);
+        }
+      }
+
+      const answer = await geminiService.answerQuery(text, effectiveEvents, accounts, startDate, endDate, { lang });
       const answerText = typeof answer === 'string' ? answer : String(answer);
       if (onAnswerText) onAnswerText(answerText);
 
