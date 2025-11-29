@@ -99,91 +99,103 @@ class VoiceSearchService {
   // Given recognized text, ask Gemini and synthesize an answer
   async handleQueryText(text, { events = [], accounts = [], startDate, endDate, lang = defaultLang, onAnswerText, onTtsDone } = {}) {
     try {
-      // prefer language code mapped for Gemini service
-      // If the user asks for the "next" occurrence (next appointment / when is my next ...),
-      // we may need to look further ahead than the currently loaded `events` array.
-      const nextQueryRegex = /\b(next|when is my next|next appointment|next .*appointment|when is my)\b/i;
+      // First, ask Gemini to interpret the user's query into a strict JSON that
+      // contains the date range and keywords to use for searching events.
       let effectiveEvents = events || [];
+      let queryStart = startDate;
+      let queryEnd = endDate;
 
-      if (nextQueryRegex.test(text) && accounts && accounts.length) {
-        try {
-          // Determine a broad future window to search (12 months ahead)
-          const now = new Date();
-          const lookahead = new Date(now);
-          lookahead.setMonth(lookahead.getMonth() + 12);
+      try {
+        const now = new Date();
+        const interp = await geminiService.interpretQuery(text, now, { lang });
+        console.debug('[voiceSearch] interpretQuery result=', interp);
 
-          // Fetch additional events per account and merge
+        // If Gemini provided explicit start/end, use them
+        if (interp && (interp.startDate || interp.endDate)) {
+          if (interp.startDate) queryStart = new Date(interp.startDate + 'T00:00:00');
+          if (interp.endDate) queryEnd = new Date(interp.endDate + 'T23:59:59.999');
+        }
+
+        // Helper to fetch events for a range across accounts and merge
+        const fetchAndMerge = async (s, e) => {
           const fetched = [];
-          for (const acct of accounts) {
+          for (const acct of accounts || []) {
             try {
-              const evs = await googleCalendarService.getEvents(acct.id, now, lookahead);
+              const evs = await googleCalendarService.getEvents(acct.id, s, e);
               if (evs && evs.length) fetched.push(...evs);
             } catch (e) {
-              // ignore per-account failures
               console.warn('[voiceSearch] prefetch events failed for', acct.id, e && e.message);
             }
           }
           if (fetched.length) {
-            // Merge de-duplicated by event id
             const map = new Map();
             (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
             fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
             effectiveEvents = Array.from(map.values());
           }
-        } catch (prefErr) {
-          console.warn('[voiceSearch] failed to prefetch extended events', prefErr);
+        };
+
+        // Decide behavior based on scope
+        if (interp.scope === 'single_day' && interp.startDate) {
+          // already set queryStart/queryEnd above
+          await fetchAndMerge(queryStart, queryEnd);
+        } else if (interp.scope === 'range' && interp.startDate && interp.endDate) {
+          await fetchAndMerge(queryStart, queryEnd);
+        } else if (interp.scope === 'from_today' || interp.scope === 'next_occurrence') {
+          // broad search from today to 12 months to find matches
+          const s = new Date(); s.setHours(0,0,0,0);
+          const e = new Date(s); e.setMonth(e.getMonth() + 12);
+          await fetchAndMerge(s, e);
+        } else {
+          // If Gemini didn't help, fall back to previous heuristics: relative day or next-appearance
+          const nextQueryRegex = /\b(next|when is my next|next appointment|next .*appointment|when is my)\b/i;
+          const relDayRegex = /\b(today|tomorrow|day after tomorrow|day-after-tomorrow|послезавтра|завтра|сегодня)\b/i;
+          if (nextQueryRegex.test(text)) {
+            const s = new Date();
+            const e = new Date(s); e.setMonth(e.getMonth() + 12);
+            await fetchAndMerge(s, e);
+          } else if (relDayRegex.test(text)) {
+            const token = (text.match(relDayRegex)[0] || '').toLowerCase();
+            let offset = 0;
+            if (token.includes('tomorrow') || token.includes('завтра')) offset = 1;
+            if (token.includes('day after') || token.includes('послезавтра')) offset = 2;
+            const target = new Date(); target.setDate(target.getDate() + offset); target.setHours(0,0,0,0);
+            const dayStart = new Date(target);
+            const dayEnd = new Date(target); dayEnd.setHours(23,59,59,999);
+            queryStart = dayStart; queryEnd = dayEnd;
+            await fetchAndMerge(queryStart, queryEnd);
+          }
         }
+
+        // If Gemini provided keywords, filter events by them (title or description)
+        const kw_en = (interp.keywords_en || []).map(k => String(k).toLowerCase()).filter(Boolean);
+        const kw_ru = (interp.keywords_ru || []).map(k => String(k).toLowerCase()).filter(Boolean);
+        if ((kw_en.length || kw_ru.length) && effectiveEvents && effectiveEvents.length) {
+          const filtered = effectiveEvents.filter(ev => {
+            const title = (ev.summary || ev.title || '').toString().toLowerCase();
+            const desc = (ev.description || ev.notes || '').toString().toLowerCase();
+            for (const k of kw_en) if (title.includes(k) || desc.includes(k)) return true;
+            for (const k of kw_ru) if (title.includes(k) || desc.includes(k)) return true;
+            return false;
+          });
+          // For 'next_occurrence' pick the earliest matching event
+          if (interp.scope === 'next_occurrence') {
+            filtered.sort((a,b) => new Date(a.start?.dateTime || a.start?.date || 0) - new Date(b.start?.dateTime || b.start?.date || 0));
+            effectiveEvents = filtered.length ? [filtered[0]] : [];
+          } else {
+            effectiveEvents = filtered;
+          }
+        }
+
+      } catch (interpretErr) {
+        console.warn('[voiceSearch] interpretQuery failed, falling back to heuristics', interpretErr);
+        // fallback preserves existing behavior below
       }
 
-      // Detect explicit relative-day requests (today / tomorrow / day after tomorrow)
-      const now = new Date();
-      const relDayRegex = /\b(today|tomorrow|day after tomorrow|day-after-tomorrow|послезавтра|завтра|сегодня)\b/i;
-      const relMatch = text.match(relDayRegex);
-      let queryStart = startDate;
-      let queryEnd = endDate;
-
-      if (relMatch) {
-        const token = (relMatch[0] || '').toLowerCase();
-        let offset = 0;
-        if (token.includes('tomorrow') || token.includes('завтра')) offset = 1;
-        if (token.includes('day after') || token.includes('послезавтра')) offset = 2;
-        if (token.includes('today') || token.includes('сегодня')) offset = 0;
-
-        const target = new Date(now);
-        target.setDate(now.getDate() + offset);
-        target.setHours(0,0,0,0);
-        const dayStart = new Date(target);
-        const dayEnd = new Date(target);
-        dayEnd.setHours(23,59,59,999);
-
-        queryStart = dayStart;
-        queryEnd = dayEnd;
-
-        // Prefetch events for the specific day across accounts to ensure we have the right context
-        try {
-          const fetched = [];
-          for (const acct of accounts) {
-            try {
-              const evs = await googleCalendarService.getEvents(acct.id, queryStart, queryEnd);
-              if (evs && evs.length) fetched.push(...evs);
-            } catch (e) {
-              console.warn('[voiceSearch] prefetch day events failed for', acct.id, e && e.message);
-            }
-          }
-          if (fetched.length) {
-            const map = new Map();
-            (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
-            fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
-            effectiveEvents = Array.from(map.values());
-          }
-        } catch (e) {
-          console.warn('[voiceSearch] failed to prefetch specific day events', e);
-        }
-      }
       // Debug log: which exact range we're querying and how many events will be sent to the assistant
       try {
-        const qs = queryStart ? queryStart.toISOString() : (startDate ? new Date(startDate).toISOString() : 'none');
-        const qe = queryEnd ? queryEnd.toISOString() : (endDate ? new Date(endDate).toISOString() : 'none');
+        const qs = queryStart ? (new Date(queryStart)).toISOString() : (startDate ? new Date(startDate).toISOString() : 'none');
+        const qe = queryEnd ? (new Date(queryEnd)).toISOString() : (endDate ? new Date(endDate).toISOString() : 'none');
         console.debug('[voiceSearch] queryStart=', qs, 'queryEnd=', qe, 'effectiveEvents=', (effectiveEvents || []).length);
       } catch (dbgErr) {
         console.debug('[voiceSearch] debug log failed', dbgErr);

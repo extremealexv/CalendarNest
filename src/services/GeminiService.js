@@ -10,6 +10,80 @@ class GeminiService {
     this.isInitialized = false;
   }
 
+  // Interpret a natural language query and return a strict JSON describing
+  // the desired date range and search keywords (both English and Russian).
+  // Returned object shape:
+  // {
+  //   startDate: "YYYY-MM-DD" | null,
+  //   endDate: "YYYY-MM-DD" | null,
+  //   scope: "single_day" | "range" | "from_today" | "next_occurrence" | "unspecified",
+  //   keywords_en: ["dentist","doctor"],
+  //   keywords_ru: ["стоматолог","дантист"],
+  //   notes: "optional notes"
+  // }
+  async interpretQuery(query, referenceDate = new Date(), options = {}) {
+    if (!this.initialize()) {
+      throw new Error('Gemini AI not available');
+    }
+
+    try {
+      const lang = (options.lang || 'ru').toLowerCase();
+      const languageInstruction = lang.startsWith('ru') ? 'Ответьте на русском.' : 'Respond in English.';
+      const ref = safeFormat(referenceDate, 'yyyy-MM-dd', '');
+
+      const prompt = `
+${languageInstruction}
+Reference date: ${ref}
+
+You will be given a user's short question about their calendar. Your task is to return a strict JSON object (ONLY JSON, no commentary, no markdown) that tells us which date range the user meant and which keywords should be used to filter events. The JSON MUST include the fields: startDate, endDate, scope, keywords_en, keywords_ru, notes.
+
+Field rules:
+- startDate and endDate: use ISO date format YYYY-MM-DD for inclusive ranges. If no explicit date is requested, return null for these fields.
+- scope: one of exactly: "single_day", "range", "from_today", "next_occurrence", or "unspecified".
+- keywords_en: array of short lowercase keyword strings to match in event titles/descriptions in English. May be empty.
+- keywords_ru: array of short lowercase keyword strings to match in event titles/descriptions in Russian. May be empty.
+- notes: a short human-friendly note explaining your interpretation (optional, plain text).
+
+Examples (JSON only):
+{"startDate":"2025-11-30","endDate":"2025-11-30","scope":"single_day","keywords_en":[],"keywords_ru":[],"notes":"tomorrow"}
+{"startDate":null,"endDate":null,"scope":"from_today","keywords_en":["dentist"],"keywords_ru":["стоматолог"],"notes":"search for next dentist appointment from today"}
+
+Now parse this question and return only the JSON object.
+
+Question: "${query}"
+`;
+
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+          window.electronAPI.geminiLog(prompt, 'interpretQuery');
+        }
+      } catch (e) { /* ignore logging errors */ }
+
+      const result = await this.model.generateContent(prompt);
+      const response = await result.response;
+      const text_response = response.text();
+
+      const jsonMatch = text_response.match(/\{[\s\S]*\}/);
+      if (!jsonMatch) {
+        throw new Error('interpretQuery: Invalid JSON response from Gemini');
+      }
+
+      const parsed = JSON.parse(jsonMatch[0]);
+
+      // Normalize keys and ensure arrays exist
+      parsed.startDate = parsed.startDate || null;
+      parsed.endDate = parsed.endDate || null;
+      parsed.scope = parsed.scope || 'unspecified';
+      parsed.keywords_en = Array.isArray(parsed.keywords_en) ? parsed.keywords_en.map(k => String(k).toLowerCase()) : [];
+      parsed.keywords_ru = Array.isArray(parsed.keywords_ru) ? parsed.keywords_ru.map(k => String(k).toLowerCase()) : [];
+      parsed.notes = parsed.notes || '';
+
+      return parsed;
+    } catch (error) {
+      console.error('interpretQuery failed:', error);
+      throw error;
+    }
+  }
   // Initialize Gemini AI
   initialize() {
     if (this.isInitialized) return true;
