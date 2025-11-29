@@ -225,6 +225,8 @@ Important: Treat all-day informational events (for example: public holidays, lun
 
 Important: For clarity, any all-day event will be represented by its start date only. If an event has an all-day start (e.g., "start": "2025-11-30" and "end": "2025-12-01"), treat it as occurring on 2025-11-30 (the start date). When speaking dates, use the start date for all-day events. Use the Reference date above to resolve relative terms like "tomorrow".
 
+Important: When including any numeric values (years, dates, counts, or times) in the spoken summary, spell out numbers as words rather than using digits. For example, write "one" or "first" instead of "1" or "1st", and write "two thousand twenty-five" instead of "2025". For times, natural TTS-friendly expressions like "eight AM" are acceptable. Avoid inline numerals.
+
 Provide a conversational summary including:
 1. Who has the busiest schedule
 2. Best times for family meetings
@@ -514,6 +516,8 @@ Events:
 ${JSON.stringify(eventsData, null, 2)}
 
 Question: "${query}"
+
+Important: When producing the spoken answer, do not use numeric digits (0-9). Spell out all numbers in words (for example, use "one" or "first" instead of "1" or "1st"; use "two thousand twenty-five" instead of "2025"). For dates, prefer spoken, unambiguous forms (for example: "thirtieth of November two thousand twenty-five" or "thirty November two thousand twenty-five"). Use the Reference date above to resolve relative terms like "tomorrow". Avoid parentheses, ISO timestamps, or inline numeric years. The output should remain under 200 words and suitable for TTS.
 
 Respond with plain text only, suitable for speech synthesis. Keep the answer under 200 words.
 `;
