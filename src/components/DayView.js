@@ -3,6 +3,7 @@ import { addHours, isSameDay, isToday } from 'date-fns';
 import { safeFormat, safeParse } from '../utils/dateUtils';
 import './DayView.css';
 import { geminiService } from '../services/GeminiService';
+import { speak } from '../services/ttsService';
 
 const DayView = ({ 
   events, 
@@ -101,54 +102,14 @@ const DayView = ({
                 // Remove markdown-like asterisks and collapse whitespace so TTS doesn't read '*' characters
                 const text = rawText.replace(/\*/g, '').replace(/\s+/g, ' ').trim();
 
-                // Try browser/electron TTS first, then fall back to main-process espeak via preload
+                // Use unified TTS helper which handles browser and main-process fallbacks
                 setAssistantText(text);
-                let handled = false;
-                if (typeof window !== 'undefined' && window.speechSynthesis) {
-                  try {
-                    const utter = new SpeechSynthesisUtterance(text);
-                    const voices = window.speechSynthesis.getVoices();
-                    if (voices && voices.length) utter.voice = voices[0];
-                    utter.onend = () => { setIsSpeaking(false); handled = true; };
-                    utter.onerror = async () => {
-                      // try main process fallback (pass language)
-                        try {
-                          if (window.electronAPI && window.electronAPI.speakText) {
-                            await window.electronAPI.speakText(text, assistantLang);
-                          }
-                        } catch (ex) {
-                          console.warn('Main-process TTS failed', ex);
-                        } finally {
-                          setIsSpeaking(false);
-                        }
-                    };
-                    window.speechSynthesis.speak(utter);
-                    handled = true;
-                  } catch (err) {
-                    console.warn('Web Speech error, falling back to main TTS', err);
-                  }
-                }
-
-                if (!handled) {
-                  // No Web Speech available or it failed synchronously — use main-process TTS if available
-                  try {
-                    if (window.electronAPI && window.electronAPI.speakText) {
-                      await window.electronAPI.speakText(text, assistantLang);
-                    } else {
-                      // final fallback: display text for estimated duration
-                      const words = text.split(/\s+/).length;
-                      const estMs = Math.max(3000, (words / 2) * 1000);
-                      setTimeout(() => setIsSpeaking(false), estMs);
-                    }
-                  } catch (ex) {
-                    console.warn('Fallback TTS failed', ex);
-                    const words = text.split(/\s+/).length;
-                    const estMs = Math.max(3000, (words / 2) * 1000);
-                    setTimeout(() => setIsSpeaking(false), estMs);
-                  } finally {
-                    // ensure speaking state cleared if speakText returns quickly
-                    setIsSpeaking(false);
-                  }
+                try {
+                  await speak(text, assistantLang);
+                } catch (ttsErr) {
+                  console.warn('[DayView] speak failed', ttsErr);
+                } finally {
+                  setIsSpeaking(false);
                 }
               } catch (err) {
                 console.warn('Gemini read failed', err);

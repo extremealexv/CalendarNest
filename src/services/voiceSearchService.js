@@ -1,5 +1,6 @@
 // voiceSearchService: handles microphone capture (Web Speech API + MediaRecorder fallback)
 import { geminiService } from './GeminiService';
+import { speak } from './ttsService';
 
 const defaultLang = 'ru';
 
@@ -102,24 +103,10 @@ class VoiceSearchService {
       const answerText = typeof answer === 'string' ? answer : String(answer);
       if (onAnswerText) onAnswerText(answerText);
 
-      // Try Web Speech synthesis
+      // Use shared TTS helper which handles browser and main-process fallbacks
       try {
-        if (window.speechSynthesis) {
-          const utter = new SpeechSynthesisUtterance(answerText.replace(/\*/g, ''));
-          // pick a voice matching language if possible
-          const voices = window.speechSynthesis.getVoices();
-          if (voices && voices.length) {
-            const match = voices.find(v => (v.lang || '').toLowerCase().startsWith((lang || defaultLang).slice(0,2)));
-            if (match) utter.voice = match;
-          }
-          utter.onend = () => { if (onTtsDone) onTtsDone(); };
-          window.speechSynthesis.speak(utter);
-        } else if (window.electronAPI && window.electronAPI.speakText) {
-          await window.electronAPI.speakText(answerText, lang);
-          if (onTtsDone) onTtsDone();
-        } else {
-          if (onTtsDone) onTtsDone();
-        }
+        await speak(answerText, lang);
+        if (onTtsDone) onTtsDone();
       } catch (ttsErr) {
         console.warn('[voiceSearch] TTS failed', ttsErr);
         if (onTtsDone) onTtsDone(ttsErr);
