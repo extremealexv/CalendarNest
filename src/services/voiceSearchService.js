@@ -2,7 +2,7 @@
 import { geminiService } from './GeminiService';
 import { speak } from './ttsService';
 import { googleCalendarService } from './GoogleCalendarService';
-import { safeParse } from '../utils/dateUtils';
+import { safeParse, safeFormat } from '../utils/dateUtils';
 
 const defaultLang = 'ru';
 
@@ -282,19 +282,25 @@ class VoiceSearchService {
   // Normalize events before sending to the assistant:
       // - For all-day events (Google uses exclusive end date), represent them with a single start date
       //   so the model clearly sees which calendar day they belong to.
-      const normalizedEvents = (effectiveEvents || []).map(ev => {
+  const normalizedEvents = (effectiveEvents || []).map(ev => {
         try {
           const isAllDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
           let out = { ...ev };
           if (isAllDay) {
             // keep Google event object shape: use { date: 'YYYY-MM-DD' }
             const day = ev.start.date;
+            // Canonicalize all-day to the start date (Google uses exclusive end dates).
             out = {
               ...out,
               start: { date: day },
               end: { date: day },
               isAllDay: true
             };
+            // Force local start/end times for all-day events to cover the full day
+            out.localStartDate = day;
+            out.localStartTime = '00:00';
+            out.localEndDate = day;
+            out.localEndTime = '23:59';
           }
 
           // Add localStart/localEnd fields to avoid model re-interpreting ISO timestamps
@@ -321,10 +327,13 @@ class VoiceSearchService {
 
             const sVals = parseAndFill(startStr);
             const eVals = parseAndFill(endStr);
-            if (sVals.d) out.localStartDate = sVals.d;
-            if (sVals.t) out.localStartTime = sVals.t;
-            if (eVals.d) out.localEndDate = eVals.d;
-            if (eVals.t) out.localEndTime = eVals.t;
+            // Only overwrite local fields for non-all-day events (we already set all-day above)
+            if (!isAllDay) {
+              if (sVals.d) out.localStartDate = sVals.d;
+              if (sVals.t) out.localStartTime = sVals.t;
+              if (eVals.d) out.localEndDate = eVals.d;
+              if (eVals.t) out.localEndTime = eVals.t;
+            }
           } catch (inner) {
             // ignore local field failures
           }
@@ -333,6 +342,47 @@ class VoiceSearchService {
         } catch (e) { /* ignore and return original */ }
         return ev;
       });
+
+      // If this is a single-day query and we already have normalized events,
+      // produce a deterministic local summary to avoid model unpredictability.
+      if (interp && interp.scope === 'single_day') {
+        const n = (normalizedEvents || []).length;
+        // If no events, speak an explicit no-plans message for clarity
+        if (n === 0) {
+          const noneTextRu = (lang && lang.startsWith('ru')) ? 'На завтра планов нет.' : 'You have no plans for tomorrow.';
+          if (onAnswerText) onAnswerText(noneTextRu);
+          try { await speak(noneTextRu, lang); } catch (e) { /* ignore */ }
+          if (onTtsDone) onTtsDone();
+          return noneTextRu;
+        }
+
+        // Build a short deterministic summary (Russian/English)
+        const makeTimeRange = (ev) => {
+          if (ev.isAllDay) return (lang && lang.startsWith('ru')) ? 'весь день' : 'all day';
+          const s = ev.localStartTime || ev.localStartDate || (ev.start && ev.start.dateTime) || '';
+          const e = ev.localEndTime || ev.localEndDate || (ev.end && ev.end.dateTime) || '';
+          if (s && e) return (lang && lang.startsWith('ru')) ? `с ${s} до ${e}` : `from ${s} to ${e}`;
+          if (s) return (lang && lang.startsWith('ru')) ? `в ${s}` : `at ${s}`;
+          return '';
+        };
+
+        const header = (lang && lang.startsWith('ru')) ? `На завтра у вас запланировано ${n === 1 ? 'одно событие' : `${n} события`}.` : `You have ${n} events tomorrow.`;
+        const parts = [header];
+        for (const ev of normalizedEvents) {
+          const time = makeTimeRange(ev);
+          const title = ev.summary || ev.title || ev.title || '';
+          if (lang && lang.startsWith('ru')) {
+            parts.push(`${time} — «${title}».`);
+          } else {
+            parts.push(`${time} - "${title}".`);
+          }
+        }
+        const summaryText = parts.join(' ');
+        if (onAnswerText) onAnswerText(summaryText);
+        try { await speak(summaryText, lang); } catch (e) { /* ignore */ }
+        if (onTtsDone) onTtsDone();
+        return summaryText;
+      }
 
       const answer = await geminiService.answerQuery(text, normalizedEvents, accounts, queryStart, queryEnd, { lang });
       const answerText = typeof answer === 'string' ? answer : String(answer);
