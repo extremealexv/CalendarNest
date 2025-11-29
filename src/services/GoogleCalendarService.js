@@ -441,6 +441,13 @@ class GoogleCalendarService {
 
     for (const calendar of calendars) {
       try {
+        // Log which calendar and time range we're requesting for diagnostics
+        try {
+          if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+            window.electronAPI.geminiLog(JSON.stringify({ getEventsRequest: { accountId, calendarId: calendar.id, timeMin: start.toISOString(), timeMax: end.toISOString() } }, null, 2), 'getEventsRequest');
+          }
+        } catch (e) { /* ignore logging errors */ }
+
         const data = await this.apiRequest(accountId, `calendars/${encodeURIComponent(calendar.id)}/events`, 'GET', null, {
           timeMin: start.toISOString(),
           timeMax: end.toISOString(),
@@ -448,6 +455,13 @@ class GoogleCalendarService {
           orderBy: 'startTime',
           maxResults: '250'
         });
+
+        // Log number of events returned for this calendar
+        try {
+          if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+            window.electronAPI.geminiLog(JSON.stringify({ getEventsResultCount: { accountId, calendarId: calendar.id, returned: (data.items || []).length } }, null, 2), 'getEventsResultCount');
+          }
+        } catch (e) { /* ignore logging */ }
 
         const acct = this.accounts.get(accountId) || {};
         const events = (data.items || []).map(event => {

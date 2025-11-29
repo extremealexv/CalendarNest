@@ -2,6 +2,7 @@
 import { geminiService } from './GeminiService';
 import { speak } from './ttsService';
 import { googleCalendarService } from './GoogleCalendarService';
+import { safeParse } from '../utils/dateUtils';
 
 const defaultLang = 'ru';
 
@@ -118,8 +119,14 @@ class VoiceSearchService {
 
         // If Gemini provided explicit start/end, use them
         if (interp && (interp.startDate || interp.endDate)) {
-          if (interp.startDate) queryStart = new Date(interp.startDate + 'T00:00:00');
-          if (interp.endDate) queryEnd = new Date(interp.endDate + 'T23:59:59.999');
+          if (interp.startDate) {
+            const d = safeParse(interp.startDate);
+            if (d) { d.setHours(0,0,0,0); queryStart = d; }
+          }
+          if (interp.endDate) {
+            const d2 = safeParse(interp.endDate);
+            if (d2) { d2.setHours(23,59,59,999); queryEnd = d2; }
+          }
         }
 
         // Helper to fetch events for a range across accounts and merge
