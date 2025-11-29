@@ -127,29 +127,6 @@ Important parsing rules:
         isAllDay: !!(event.start && event.start.date && !event.start.dateTime),
         account: event.accountName || event.accountEmail
       }));
-
-${languageInstruction}
-Analyze the following calendar data and provide a natural language summary of availability and conflicts for the family.
-
-Important: format the summary to be read aloud by a TTS engine. Use short, clear sentences; avoid lists, bullet points, emojis, markdown, or excessive punctuation. Expand abbreviations and write times in a TTS-friendly way (e.g., "1 PM", "13:00"). Do not include links or code. Limit the output to plain text (no JSON) and keep it under 180 words. If producing names or locations, return them as spoken-friendly phrases.
-
-Date Range: ${dateRange}
-Accounts: ${accounts.map(acc => acc.name).join(', ')}
-
-Events:
-${JSON.stringify(eventsData, null, 2)}
-
-Important: Treat all-day informational events (for example: public holidays, lunar phases like "full moon", day-of-year markers such as "100th day", observances, or calendar items whose title/description indicate they are informational) as non-blocking. These informational all-day entries do not prevent scheduling other events and should not be counted as "busy" time. Only treat explicit unavailability all-day events (words like "vacation", "out of office", "unavailable", "busy", "blocked") as blocking.
-
-Provide a conversational summary including:
-1. Who has the busiest schedule
-2. Best times for family meetings
-3. Any scheduling conflicts or overlaps
-4. Free time slots suitable for group activities
-5. Weekend availability
-
-Keep the response friendly and family-focused, under 180 words.
-`;
   const prompt = `
 ${languageInstruction}
 Reference date: ${referenceDate}
