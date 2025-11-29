@@ -23,16 +23,20 @@ export async function speak(text, lang = 'en') {
 
         let started = false;
         // If onstart doesn't fire within this timeout, assume browser TTS can't play audio and fallback
-        const startWatchMs = 700;
+        // Increased timeout to better tolerate slower embedded engines on SBCs (Orange Pi)
+        const startWatchMs = 1500;
         const startTimer = setTimeout(async () => {
           if (!started) {
+            console.warn('[ttsService] browser SpeechSynthesis did not start within', startWatchMs, 'ms — falling back');
             // fallback to main-process TTS if available
             try {
               if (window.electronAPI && window.electronAPI.speakText) {
+                console.warn('[ttsService] using main-process speakText fallback');
                 await window.electronAPI.speakText(safeText, lang);
                 return resolve();
               }
               // else final timed fallback
+              console.warn('[ttsService] no main-process speakText available — using timed fallback');
               await waitFallback();
               return resolve();
             } catch (err) {
@@ -41,15 +45,17 @@ export async function speak(text, lang = 'en') {
           }
         }, startWatchMs);
 
-        utter.onstart = () => { started = true; clearTimeout(startTimer); };
+        utter.onstart = () => { started = true; clearTimeout(startTimer); console.debug('[ttsService] SpeechSynthesis onstart fired'); };
         utter.onend = () => { clearTimeout(startTimer); resolve(); };
         utter.onerror = async (e) => {
           clearTimeout(startTimer);
           try {
+            console.warn('[ttsService] SpeechSynthesis error, falling back to main-process', e);
             if (window.electronAPI && window.electronAPI.speakText) {
               await window.electronAPI.speakText(safeText, lang);
               return resolve();
             }
+            console.warn('[ttsService] no main-process speakText available after error — using timed fallback');
             return resolve();
           } catch (ex) {
             return reject(ex);
