@@ -207,7 +207,27 @@ class VoiceSearchService {
         console.debug('[voiceSearch] debug log failed', dbgErr);
       }
 
-      const answer = await geminiService.answerQuery(text, effectiveEvents, accounts, queryStart, queryEnd, { lang });
+      // Normalize events before sending to the assistant:
+      // - For all-day events (Google uses exclusive end date), represent them with a single start date
+      //   so the model clearly sees which calendar day they belong to.
+      const normalizedEvents = (effectiveEvents || []).map(ev => {
+        try {
+          const isAllDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
+          if (isAllDay) {
+            // ensure start is YYYY-MM-DD and end is the same day (avoid exclusive-end confusion)
+            const day = ev.start.date;
+            return {
+              ...ev,
+              start: day,
+              end: day,
+              isAllDay: true
+            };
+          }
+        } catch (e) { /* ignore and return original */ }
+        return ev;
+      });
+
+      const answer = await geminiService.answerQuery(text, normalizedEvents, accounts, queryStart, queryEnd, { lang });
       const answerText = typeof answer === 'string' ? answer : String(answer);
       if (onAnswerText) onAnswerText(answerText);
 

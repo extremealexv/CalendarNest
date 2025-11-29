@@ -223,6 +223,8 @@ ${JSON.stringify(eventsData, null, 2)}
 
 Important: Treat all-day informational events (for example: public holidays, lunar phases like "full moon", day-of-year markers such as "100th day", observances, or calendar items whose title/description indicate they are informational) as non-blocking. These informational all-day entries do not prevent scheduling other events and should not be counted as "busy" time. Only treat explicit unavailability all-day events (words like "vacation", "out of office", "unavailable", "busy", "blocked") as blocking.
 
+Important: For clarity, any all-day event will be represented by its start date only. If an event has an all-day start (e.g., "start": "2025-11-30" and "end": "2025-12-01"), treat it as occurring on 2025-11-30 (the start date). When speaking dates, use the start date for all-day events. Use the Reference date above to resolve relative terms like "tomorrow".
+
 Provide a conversational summary including:
 1. Who has the busiest schedule
 2. Best times for family meetings
