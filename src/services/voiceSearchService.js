@@ -107,8 +107,9 @@ class VoiceSearchService {
       let queryEnd = endDate;
 
       try {
-        const now = new Date();
-        const interp = await geminiService.interpretQuery(text, now, { lang });
+  const now = new Date();
+  let interp = null;
+  interp = await geminiService.interpretQuery(text, now, { lang });
         console.debug('[voiceSearch] interpretQuery result=', interp);
         // Also write the interpretation to the main gemini log for easier remote inspection
         try {
