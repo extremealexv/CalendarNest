@@ -180,6 +180,14 @@ class VoiceSearchService {
           console.warn('[voiceSearch] failed to prefetch specific day events', e);
         }
       }
+      // Debug log: which exact range we're querying and how many events will be sent to the assistant
+      try {
+        const qs = queryStart ? queryStart.toISOString() : (startDate ? new Date(startDate).toISOString() : 'none');
+        const qe = queryEnd ? queryEnd.toISOString() : (endDate ? new Date(endDate).toISOString() : 'none');
+        console.debug('[voiceSearch] queryStart=', qs, 'queryEnd=', qe, 'effectiveEvents=', (effectiveEvents || []).length);
+      } catch (dbgErr) {
+        console.debug('[voiceSearch] debug log failed', dbgErr);
+      }
 
       const answer = await geminiService.answerQuery(text, effectiveEvents, accounts, queryStart, queryEnd, { lang });
       const answerText = typeof answer === 'string' ? answer : String(answer);

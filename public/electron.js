@@ -670,6 +670,22 @@ ipcMain.handle('renderer-log', async (event, { message }) => {
   }
 });
 
+// Log Gemini prompts to a dedicated file for debugging/model-audit
+ipcMain.handle('gemini-log', async (event, { prompt, tag = '' }) => {
+  try {
+    const logPath = path.join(app.getPath('userData'), 'gemini_prompts.log');
+    const tmpLogPath = '/tmp/famsync-gemini-prompts.log';
+    const line = new Date().toISOString() + (tag ? ` [${tag}] ` : ' ') + (String(prompt) || '') + '\n';
+    try { fs.appendFileSync(logPath, line, 'utf8'); } catch (e) { /* ignore */ }
+    try { fs.appendFileSync(tmpLogPath, line, 'utf8'); } catch (e) { /* ignore */ }
+    console.log('[gemini-log] tag=', tag, 'len=', (String(prompt) || '').length);
+    return { success: true };
+  } catch (e) {
+    console.error('gemini-log failed', e);
+    return { success: false, error: String(e) };
+  }
+});
+
 // Refresh auth tokens in main process (avoids CORS and allows client_secret)
 ipcMain.handle('refresh-auth-token', async (event, { refreshToken }) => {
   try {

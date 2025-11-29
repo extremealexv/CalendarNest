@@ -27,4 +27,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   ,
   // Allow renderer to write a short message to main process log for diagnostics
   rendererLog: (msg) => ipcRenderer.invoke('renderer-log', { message: String(msg) })
+  ,
+  // Log Gemini prompts (prompt text, optional tag) to a separate file in main process
+  geminiLog: (prompt, tag = '') => ipcRenderer.invoke('gemini-log', { prompt: String(prompt), tag: String(tag) })
 });

@@ -77,6 +77,13 @@ Important parsing rules:
 - "Tomorrow" means the day after today
 `;
 
+      // Log the prompt for debugging/audit if main process logging is available
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+          window.electronAPI.geminiLog(prompt, 'parseEvent');
+        }
+      } catch (e) { /* ignore logging errors */ }
+
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text_response = response.text();
@@ -108,6 +115,8 @@ Important parsing rules:
   const lang = (options.lang || 'en').toLowerCase();
   const languageInstruction = lang.startsWith('ru') ? 'Please write the summary in Russian.' : 'Please write the summary in English.';
   const dateRange = `${safeFormat(startDate, 'MMM d', '')} - ${safeFormat(endDate, 'MMM d, yyyy', '')}`;
+  // Provide an explicit local reference date to avoid model-relative-date ambiguity
+  const referenceDate = safeFormat(startDate || new Date(), 'yyyy-MM-dd', '');
       
       // Prepare events data for analysis — include isAllDay and description so the model can decide whether an event is informational
       const eventsData = events.map(event => ({
@@ -119,8 +128,31 @@ Important parsing rules:
         account: event.accountName || event.accountEmail
       }));
 
+${languageInstruction}
+Analyze the following calendar data and provide a natural language summary of availability and conflicts for the family.
+
+Important: format the summary to be read aloud by a TTS engine. Use short, clear sentences; avoid lists, bullet points, emojis, markdown, or excessive punctuation. Expand abbreviations and write times in a TTS-friendly way (e.g., "1 PM", "13:00"). Do not include links or code. Limit the output to plain text (no JSON) and keep it under 180 words. If producing names or locations, return them as spoken-friendly phrases.
+
+Date Range: ${dateRange}
+Accounts: ${accounts.map(acc => acc.name).join(', ')}
+
+Events:
+${JSON.stringify(eventsData, null, 2)}
+
+Important: Treat all-day informational events (for example: public holidays, lunar phases like "full moon", day-of-year markers such as "100th day", observances, or calendar items whose title/description indicate they are informational) as non-blocking. These informational all-day entries do not prevent scheduling other events and should not be counted as "busy" time. Only treat explicit unavailability all-day events (words like "vacation", "out of office", "unavailable", "busy", "blocked") as blocking.
+
+Provide a conversational summary including:
+1. Who has the busiest schedule
+2. Best times for family meetings
+3. Any scheduling conflicts or overlaps
+4. Free time slots suitable for group activities
+5. Weekend availability
+
+Keep the response friendly and family-focused, under 180 words.
+`;
   const prompt = `
 ${languageInstruction}
+Reference date: ${referenceDate}
 Analyze the following calendar data and provide a natural language summary of availability and conflicts for the family.
 
 Important: format the summary to be read aloud by a TTS engine. Use short, clear sentences; avoid lists, bullet points, emojis, markdown, or excessive punctuation. Expand abbreviations and write times in a TTS-friendly way (e.g., "1 PM", "13:00"). Do not include links or code. Limit the output to plain text (no JSON) and keep it under 180 words. If producing names or locations, return them as spoken-friendly phrases.
@@ -270,6 +302,13 @@ Preferences:
 Only return the JSON array, no other text.
 `;
 
+      // Log the prompt for diagnostics
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+          window.electronAPI.geminiLog(prompt, 'suggestMeetingTimes');
+        }
+      } catch (e) { /* ignore */ }
+
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text_response = response.text();
@@ -356,6 +395,13 @@ Examples: ["What about next week?", "Can we make it 2 hours?", "Add Sarah to the
 Only return the JSON array.
 `;
 
+      // Log the prompt for diagnostics
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+          window.electronAPI.geminiLog(prompt, 'getConversationContext');
+        }
+      } catch (e) { /* ignore */ }
+
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
       const text_response = response.text();
@@ -383,7 +429,10 @@ Only return the JSON array.
       const languageInstruction = lang.startsWith('ru') ? 'Please answer in Russian.' : 'Please answer in English.';
       const dateRange = startDate && endDate ? `${safeFormat(startDate, 'MMM d', '')} - ${safeFormat(endDate, 'MMM d, yyyy', '')}` : 'current date range';
 
-      const eventsData = (events || []).map(event => ({
+  // Provide a reference date for answer queries to avoid model-relative-date ambiguity
+  const referenceDate = safeFormat(startDate || new Date(), 'yyyy-MM-dd', '');
+
+  const eventsData = (events || []).map(event => ({
         title: event.summary || event.title,
         description: event.description || '',
         start: event.start?.dateTime || event.start?.date,
@@ -396,6 +445,8 @@ Only return the JSON array.
 ${languageInstruction}
 You are given a user's calendar data and a question. Answer the question concisely and in a way suitable for TTS (short clear sentences).
 
+Reference date: ${referenceDate}
+
 Date Range: ${dateRange}
 Accounts: ${accounts.map(acc => acc.name).join(', ')}
 
@@ -406,6 +457,12 @@ Question: "${query}"
 
 Respond with plain text only, suitable for speech synthesis. Keep the answer under 200 words.
 `;
+      // Log the prompt for diagnostics/audit if available
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+          window.electronAPI.geminiLog(prompt, 'answerQuery');
+        }
+      } catch (e) { /* ignore */ }
 
       const result = await this.model.generateContent(prompt);
       const response = await result.response;
