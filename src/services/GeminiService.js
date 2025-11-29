@@ -78,6 +78,13 @@ Question: "${query}"
       parsed.keywords_ru = Array.isArray(parsed.keywords_ru) ? parsed.keywords_ru.map(k => String(k).toLowerCase()) : [];
       parsed.notes = parsed.notes || '';
 
+      // Log the interpreted JSON result for debugging/audit
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+          window.electronAPI.geminiLog(JSON.stringify({ interpretQueryResult: parsed }, null, 2), 'interpretQueryResult');
+        }
+      } catch (e) { /* ignore logging errors */ }
+
       return parsed;
     } catch (error) {
       console.error('interpretQuery failed:', error);

@@ -109,6 +109,12 @@ class VoiceSearchService {
         const now = new Date();
         const interp = await geminiService.interpretQuery(text, now, { lang });
         console.debug('[voiceSearch] interpretQuery result=', interp);
+        // Also write the interpretation to the main gemini log for easier remote inspection
+        try {
+          if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+            window.electronAPI.geminiLog(JSON.stringify({ voiceInterpret: interp }, null, 2), 'voiceInterpret');
+          }
+        } catch (e) { /* ignore */ }
 
         // If Gemini provided explicit start/end, use them
         if (interp && (interp.startDate || interp.endDate)) {
