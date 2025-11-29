@@ -173,6 +173,36 @@ class VoiceSearchService {
           }
         }
 
+        // After merging fetched events, filter events to the requested date range
+        if (queryStart || queryEnd) {
+          try {
+            const sTs = queryStart ? new Date(queryStart).getTime() : null;
+            const eTs = queryEnd ? new Date(queryEnd).getTime() : null;
+            effectiveEvents = (effectiveEvents || []).filter(ev => {
+              try {
+                // all-day event with start.date
+                if (ev.start && ev.start.date) {
+                  const d = new Date(ev.start.date + 'T00:00:00');
+                  const t = d.getTime();
+                  if (sTs !== null && t < sTs) return false;
+                  if (eTs !== null && t > eTs) return false;
+                  return true;
+                }
+                // timed event with start.dateTime or parsedStart
+                const startStr = ev.start && (ev.start.dateTime || ev.start.date);
+                const parsed = startStr ? new Date(startStr) : (ev.parsedStart || null);
+                if (!parsed) return false;
+                const pt = parsed.getTime();
+                if (sTs !== null && pt < sTs) return false;
+                if (eTs !== null && pt > eTs) return false;
+                return true;
+              } catch (e) { return false; }
+            });
+          } catch (filterErr) {
+            console.warn('[voiceSearch] date-range filter failed', filterErr);
+          }
+        }
+
         // If Gemini provided keywords, filter events by them (title or description)
         const kw_en = (interp.keywords_en || []).map(k => String(k).toLowerCase()).filter(Boolean);
         const kw_ru = (interp.keywords_ru || []).map(k => String(k).toLowerCase()).filter(Boolean);
@@ -214,12 +244,12 @@ class VoiceSearchService {
         try {
           const isAllDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
           if (isAllDay) {
-            // ensure start is YYYY-MM-DD and end is the same day (avoid exclusive-end confusion)
+            // keep Google event object shape: use { date: 'YYYY-MM-DD' }
             const day = ev.start.date;
             return {
               ...ev,
-              start: day,
-              end: day,
+              start: { date: day },
+              end: { date: day },
               isAllDay: true
             };
           }
