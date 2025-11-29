@@ -500,7 +500,14 @@ Only return the JSON array.
         start: event.start?.dateTime || event.start?.date,
         end: event.end?.dateTime || event.end?.date,
         isAllDay: !!(event.start && event.start.date && !event.start.dateTime),
-        account: event.accountName || event.accountEmail
+        account: event.accountName || event.accountEmail,
+        // If the caller precomputed local date/time fields, include them so the model
+        // doesn't need to recompute or risk timezone-related shifts. Use these verbatim.
+        localStartDate: event.localStartDate || null,
+        localStartTime: event.localStartTime || null,
+        localEndDate: event.localEndDate || null,
+        localEndTime: event.localEndTime || null,
+        localTimezone: event.localTimezone || null
       }));
 
       const prompt = `
@@ -517,7 +524,7 @@ ${JSON.stringify(eventsData, null, 2)}
 
 Question: "${query}"
 
-Important: When producing the spoken answer, do not use numeric digits (0-9). Spell out all numbers in words (for example, use "one" or "first" instead of "1" or "1st"; use "two thousand twenty-five" instead of "2025"). For dates, prefer spoken, unambiguous forms (for example: "thirtieth of November two thousand twenty-five" or "thirty November two thousand twenty-five"). Use the Reference date above to resolve relative terms like "tomorrow". Avoid parentheses, ISO timestamps, or inline numeric years. The output should remain under 200 words and suitable for TTS.
+Important: For each event above, if the fields `localStartDate` and/or `localStartTime` (and `localEndDate`/`localEndTime`) are present, use those values verbatim when referencing the event's calendar day and time. Do NOT infer or shift dates from ISO timestamps or end-dates; the caller has already computed the intended local date/time. For all-day events prefer the provided `localStartDate` as the canonical day. When producing the spoken answer, do not use numeric digits (0-9). Spell out all numbers in words (for example, use "one" or "first" instead of "1" or "1st"; use "two thousand twenty-five" instead of "2025"). For dates, prefer spoken, unambiguous forms (for example: "thirtieth of November two thousand twenty-five" or "thirty November two thousand twenty-five"). Use the Reference date above to resolve relative terms like "tomorrow". Avoid parentheses, ISO timestamps, or inline numeric years. The output should remain under 200 words and suitable for TTS.
 
 Respond with plain text only, suitable for speech synthesis. Keep the answer under 200 words.
 `;

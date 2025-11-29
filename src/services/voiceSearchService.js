@@ -129,7 +129,7 @@ class VoiceSearchService {
           }
         }
 
-        // Helper to fetch events for a range across accounts and merge
+  // Helper to fetch events for a range across accounts and merge
         const fetchAndMerge = async (s, e) => {
           const fetched = [];
           for (const acct of accounts || []) {
@@ -147,6 +147,41 @@ class VoiceSearchService {
             effectiveEvents = Array.from(map.values());
           }
         };
+
+        // If Gemini didn't provide explicit start/end but the user asked about
+        // 'next week' / 'this week' (or Russian equivalents), compute a precise
+        // Monday-Sunday range and use that.
+        try {
+          const textLower = (text || '').toString().toLowerCase();
+          const nextWeekRE = /next week|на следующей неделе|следующая недел|следующей неделе/;
+          const thisWeekRE = /this week|на этой неделе|эта недел/;
+          if ((!interp.startDate && !interp.endDate) && nextWeekRE.test(textLower)) {
+            const now = new Date();
+            // compute start of current week (Monday)
+            const curMonday = new Date(now);
+            curMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+            curMonday.setHours(0,0,0,0);
+            const nextMonday = new Date(curMonday);
+            nextMonday.setDate(curMonday.getDate() + 7);
+            const nextSunday = new Date(nextMonday);
+            nextSunday.setDate(nextMonday.getDate() + 6);
+            nextSunday.setHours(23,59,59,999);
+            queryStart = nextMonday;
+            queryEnd = nextSunday;
+          } else if ((!interp.startDate && !interp.endDate) && thisWeekRE.test(textLower)) {
+            const now = new Date();
+            const curMonday = new Date(now);
+            curMonday.setDate(now.getDate() - ((now.getDay() + 6) % 7));
+            curMonday.setHours(0,0,0,0);
+            const curSunday = new Date(curMonday);
+            curSunday.setDate(curMonday.getDate() + 6);
+            curSunday.setHours(23,59,59,999);
+            queryStart = curMonday;
+            queryEnd = curSunday;
+          }
+        } catch (weekErr) {
+          /* ignore */
+        }
 
         // Decide behavior based on scope
         if (interp.scope === 'single_day' && interp.startDate) {
@@ -244,22 +279,57 @@ class VoiceSearchService {
         console.debug('[voiceSearch] debug log failed', dbgErr);
       }
 
-      // Normalize events before sending to the assistant:
+  // Normalize events before sending to the assistant:
       // - For all-day events (Google uses exclusive end date), represent them with a single start date
       //   so the model clearly sees which calendar day they belong to.
       const normalizedEvents = (effectiveEvents || []).map(ev => {
         try {
           const isAllDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
+          let out = { ...ev };
           if (isAllDay) {
             // keep Google event object shape: use { date: 'YYYY-MM-DD' }
             const day = ev.start.date;
-            return {
-              ...ev,
+            out = {
+              ...out,
               start: { date: day },
               end: { date: day },
               isAllDay: true
             };
           }
+
+          // Add localStart/localEnd fields to avoid model re-interpreting ISO timestamps
+          // localStartDate/localEndDate: local calendar date in YYYY-MM-DD
+          // localStartTime/localEndTime: local time in HH:mm (24h)
+          // localTimezone: the runtime resolved timezone string
+          try {
+            const tz = Intl && Intl.DateTimeFormat ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
+            out.localTimezone = tz || null;
+
+            const startStr = ev.start && (ev.start.dateTime || ev.start.date);
+            const endStr = ev.end && (ev.end.dateTime || ev.end.date);
+            const parseAndFill = (s) => {
+              if (!s) return { d: null, t: null };
+              const dt = safeParse(s);
+              if (!dt) return { d: null, t: null };
+              const y = dt.getFullYear();
+              const m = String(dt.getMonth() + 1).padStart(2, '0');
+              const day = String(dt.getDate()).padStart(2, '0');
+              const hh = String(dt.getHours()).padStart(2, '0');
+              const mm = String(dt.getMinutes()).padStart(2, '0');
+              return { d: `${y}-${m}-${day}`, t: `${hh}:${mm}` };
+            };
+
+            const sVals = parseAndFill(startStr);
+            const eVals = parseAndFill(endStr);
+            if (sVals.d) out.localStartDate = sVals.d;
+            if (sVals.t) out.localStartTime = sVals.t;
+            if (eVals.d) out.localEndDate = eVals.d;
+            if (eVals.t) out.localEndTime = eVals.t;
+          } catch (inner) {
+            // ignore local field failures
+          }
+
+          return out;
         } catch (e) { /* ignore and return original */ }
         return ev;
       });
