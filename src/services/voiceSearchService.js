@@ -135,7 +135,53 @@ class VoiceSearchService {
         }
       }
 
-      const answer = await geminiService.answerQuery(text, effectiveEvents, accounts, startDate, endDate, { lang });
+      // Detect explicit relative-day requests (today / tomorrow / day after tomorrow)
+      const now = new Date();
+      const relDayRegex = /\b(today|tomorrow|day after tomorrow|day-after-tomorrow|послезавтра|завтра|сегодня)\b/i;
+      const relMatch = text.match(relDayRegex);
+      let queryStart = startDate;
+      let queryEnd = endDate;
+
+      if (relMatch) {
+        const token = (relMatch[0] || '').toLowerCase();
+        let offset = 0;
+        if (token.includes('tomorrow') || token.includes('завтра')) offset = 1;
+        if (token.includes('day after') || token.includes('послезавтра')) offset = 2;
+        if (token.includes('today') || token.includes('сегодня')) offset = 0;
+
+        const target = new Date(now);
+        target.setDate(now.getDate() + offset);
+        target.setHours(0,0,0,0);
+        const dayStart = new Date(target);
+        const dayEnd = new Date(target);
+        dayEnd.setHours(23,59,59,999);
+
+        queryStart = dayStart;
+        queryEnd = dayEnd;
+
+        // Prefetch events for the specific day across accounts to ensure we have the right context
+        try {
+          const fetched = [];
+          for (const acct of accounts) {
+            try {
+              const evs = await googleCalendarService.getEvents(acct.id, queryStart, queryEnd);
+              if (evs && evs.length) fetched.push(...evs);
+            } catch (e) {
+              console.warn('[voiceSearch] prefetch day events failed for', acct.id, e && e.message);
+            }
+          }
+          if (fetched.length) {
+            const map = new Map();
+            (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
+            fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
+            effectiveEvents = Array.from(map.values());
+          }
+        } catch (e) {
+          console.warn('[voiceSearch] failed to prefetch specific day events', e);
+        }
+      }
+
+      const answer = await geminiService.answerQuery(text, effectiveEvents, accounts, queryStart, queryEnd, { lang });
       const answerText = typeof answer === 'string' ? answer : String(answer);
       if (onAnswerText) onAnswerText(answerText);
 
