@@ -756,6 +756,29 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
       };
 
       const doPlay = (file, rate, channels) => {
+        // Prefer PulseAudio playback (paplay) which will route through the pulseaudio server
+        // and avoid direct ALSA device access that can be busy or unavailable. Fall back to aplay
+        // if paplay is not present or fails.
+        const paplayArgs = [file];
+        writeLog('trying paplay args: ' + JSON.stringify(paplayArgs));
+        try {
+          const paplay = spawn('paplay', paplayArgs);
+          paplay.on('error', (err) => {
+            writeLog('paplay spawn error: ' + String(err) + ' — falling back to aplay');
+            // fallback to aplay below
+          });
+          let pstderr = '';
+          paplay.stderr.on && paplay.stderr.on('data', d => { pstderr += d.toString(); writeLog('paplay stderr: ' + d.toString()); });
+          paplay.on && paplay.on('close', (pcode) => {
+            if (pcode === 0) return settle({ success: true });
+            writeLog('paplay exited with code: ' + pcode + ' stderr: ' + pstderr + ' — falling back to aplay');
+            // fall through to aplay fallback
+          });
+        } catch (e) {
+          writeLog('paplay attempt threw: ' + String(e) + ' — will try aplay');
+        }
+
+        // Fallback to aplay using ALSA device (older method)
         const aplayArgs = ['-q', '-f', 'S16_LE', '-r', String(rate), '-c', String(channels), '-D', device, file];
         writeLog('aplay args: ' + JSON.stringify(aplayArgs));
         const aplay = spawn('aplay', aplayArgs);
@@ -798,10 +821,27 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
             if (mk.status === 0) {
               writeLog('mkfifo succeeded');
               // start aplay reading from FIFO
-              const aplayArgs = ['-q', '-D', device, fifo];
-              writeLog('aplay fifo args: ' + JSON.stringify(aplayArgs));
-              const aplayProc = spawn('aplay', aplayArgs);
-              aplayProc.on('error', (err) => { writeLog('aplay fifo spawn error: ' + String(err)); });
+              // Try paplay reading from FIFO first (PulseAudio). If paplay not available, fall back to aplay.
+              const paplayArgs = [fifo];
+              writeLog('paplay fifo args: ' + JSON.stringify(paplayArgs));
+              let aplayProc = null;
+              try {
+                const paplayProc = spawn('paplay', paplayArgs);
+                paplayProc.on('error', (err) => { writeLog('paplay fifo spawn error: ' + String(err) + ' — will try aplay');
+                  // try aplay below
+                });
+                // If paplay exits normally it will settle via its exit handler in doPlay; otherwise we still prepare fallback
+                aplayProc = paplayProc;
+              } catch (err) {
+                writeLog('paplay fifo exception: ' + String(err) + ' — falling back to aplay');
+              }
+
+              if (!aplayProc) {
+                const aplayArgs = ['-q', '-D', device, fifo];
+                writeLog('aplay fifo args: ' + JSON.stringify(aplayArgs));
+                aplayProc = spawn('aplay', aplayArgs);
+                aplayProc.on('error', (err) => { writeLog('aplay fifo spawn error: ' + String(err)); });
+              }
 
               // spawn RHVoice to write to fifo
               const rhArgs = ['-p', 'Elena', '-o', fifo];
