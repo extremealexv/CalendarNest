@@ -130,7 +130,10 @@ class VoiceSearchService {
           }
         }
 
-  // Helper to fetch events for a range across accounts and merge
+      // Track whether a server fetch returned events in this handleQueryText run
+      let lastFetchTotal = 0;
+
+      // Helper to fetch events for a range across accounts and merge
         const fetchAndMerge = async (s, e) => {
           const fetched = [];
           // If caller did not pass accounts, fall back to any loaded accounts in the calendar service
@@ -161,7 +164,8 @@ class VoiceSearchService {
               (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
               fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
               effectiveEvents = Array.from(map.values());
-              try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeResultCount: fetched.length }, null, 2), 'fetchAndMerge'); } catch (e) {}
+              lastFetchTotal = effectiveEvents.length || fetched.length || 0;
+              try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeResultCount: fetched.length, effectiveEventsAfterMerge: lastFetchTotal }, null, 2), 'fetchAndMerge'); } catch (e) {}
             } else {
               try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeResultCount: 0 }, null, 2), 'fetchAndMerge'); } catch (e) {}
             }
@@ -475,8 +479,14 @@ class VoiceSearchService {
 
       if (tryDeterministicSummary) {
         const n = (normalizedEvents || []).length;
+        try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ deterministicSummaryCheck: { normalizedEvents: n, lastFetchTotal } }, null, 2), 'deterministicSummaryCheck'); } catch (e) {}
         // If no events, speak an explicit no-plans message for clarity
         if (n === 0) {
+          // If we recently fetched events from server (lastFetchTotal > 0), avoid concluding "no plans"
+          // here because normalization/filtering may have excluded events; instead continue to LLM path
+          if (lastFetchTotal && lastFetchTotal > 0) {
+            try { console.debug('[voiceSearch] deterministic summary skipped because fetch returned', lastFetchTotal, 'events'); } catch (e) {}
+          } else {
           // build contextual no-plans message depending on scope
           let noneText = '';
           if (lang && lang.startsWith('ru')) {
@@ -490,6 +500,7 @@ class VoiceSearchService {
           try { await speak(noneText, lang); } catch (e) { /* ignore */ }
           if (onTtsDone) onTtsDone();
           return noneText;
+          }
         }
 
         // Build a short deterministic summary (Russian/English)

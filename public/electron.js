@@ -837,7 +837,7 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
               }
 
               // spawn RHVoice to write to fifo
-              const rhArgs = ['-p', 'Elena', '-o', fifo];
+              const rhArgs = ['-p', 'Umka', '-o', fifo];
               writeLog('RHVoice fifo args: ' + JSON.stringify(rhArgs));
               const rh = spawn('RHVoice-test', rhArgs);
               rh.on('error', (err) => { writeLog('RHVoice fifo spawn error: ' + String(err)); });
@@ -865,7 +865,7 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
           }
 
           // Fallback: write to tmp file then playback
-          const rhArgs = ['-p', 'Elena', '-o', tmpFile];
+          const rhArgs = ['-p', 'Umka', '-o', tmpFile];
           writeLog('RHVoice file args: ' + JSON.stringify(rhArgs));
           try {
             const rh = spawn('RHVoice-test', rhArgs);
