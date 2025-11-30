@@ -99,6 +99,13 @@ function App() {
         rangeEnd = endOfMonth(new Date());
       }
 
+      // Diagnostic: log which accounts and what range we're querying
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
+          window.electronAPI.rendererLog('loadCalendarData accounts=' + JSON.stringify((authenticatedAccounts || []).map(a => a.id || a.email || a), null, 2) + ' rangeStart=' + rangeStart.toISOString() + ' rangeEnd=' + rangeEnd.toISOString());
+        }
+      } catch (e) {}
+
       for (const account of authenticatedAccounts) {
         const accountEvents = await googleCalendarService.getEvents(account.id, rangeStart, rangeEnd);
         allEvents.push(...accountEvents);

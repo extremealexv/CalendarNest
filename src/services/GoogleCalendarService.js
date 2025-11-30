@@ -437,6 +437,13 @@ class GoogleCalendarService {
     }
 
     const calendars = await this.getCalendars(accountId);
+    // Diagnostic: log how many calendars we will query for this account
+    try {
+      if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') {
+        window.electronAPI.geminiLog(JSON.stringify({ getCalendarsCount: { accountId, count: (calendars || []).length } }, null, 2), 'getCalendarsCount');
+      }
+      console.debug('[GoogleCalendarService] getEvents account=', accountId, 'calendars=', (calendars || []).length);
+    } catch (e) { /* ignore */ }
     const allEvents = [];
 
     for (const calendar of calendars) {
