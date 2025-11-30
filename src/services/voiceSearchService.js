@@ -216,13 +216,24 @@ class VoiceSearchService {
           }
         }
 
-        // After merging fetched events, filter events to the requested date range
+        // After merging fetched events, filter events to the requested date range.
+        // Be resilient: prefer explicit localStartDate if present, then Google start.date (all-day),
+        // then start.dateTime parsed via safeParse. This avoids dropping events due to timezone shifts.
         if (queryStart || queryEnd) {
           try {
             const sTs = queryStart ? new Date(queryStart).getTime() : null;
             const eTs = queryEnd ? new Date(queryEnd).getTime() : null;
             effectiveEvents = (effectiveEvents || []).filter(ev => {
               try {
+                // Prefer explicit localStartDate (populated later by normalization in some flows)
+                if (ev.localStartDate) {
+                  const d = new Date(ev.localStartDate + 'T00:00:00');
+                  const t = d.getTime();
+                  if (sTs !== null && t < sTs) return false;
+                  if (eTs !== null && t > eTs) return false;
+                  return true;
+                }
+
                 // all-day event with start.date
                 if (ev.start && ev.start.date) {
                   const d = new Date(ev.start.date + 'T00:00:00');
@@ -231,9 +242,13 @@ class VoiceSearchService {
                   if (eTs !== null && t > eTs) return false;
                   return true;
                 }
-                // timed event with start.dateTime or parsedStart
+
+                // timed event with start.dateTime
                 const startStr = ev.start && (ev.start.dateTime || ev.start.date);
-                const parsed = startStr ? new Date(startStr) : (ev.parsedStart || null);
+                let parsed = null;
+                if (startStr) parsed = safeParse(startStr);
+                // fallback to any parsedStart field previously attached
+                if (!parsed && ev.parsedStart) parsed = new Date(ev.parsedStart);
                 if (!parsed) return false;
                 const pt = parsed.getTime();
                 if (sTs !== null && pt < sTs) return false;
@@ -345,16 +360,39 @@ class VoiceSearchService {
       });
 
       // If this is a single-day query and we already have normalized events,
-      // produce a deterministic local summary to avoid model unpredictability.
-      if (interp && interp.scope === 'single_day') {
+      // or a short range (up to seven days), produce a deterministic local summary
+      // to avoid model unpredictability and accidental "no plans" answers.
+      const tryDeterministicSummary = (() => {
+        try {
+          if (!interp) return false;
+          if (interp.scope === 'single_day') return true;
+          if (interp.scope === 'range' && queryStart && queryEnd) {
+            const s = new Date(queryStart);
+            const e = new Date(queryEnd);
+            const days = Math.round((e - s) / (24 * 3600 * 1000)) + 1;
+            return days <= 7;
+          }
+          return false;
+        } catch (e) { return false; }
+      })();
+
+      if (tryDeterministicSummary) {
         const n = (normalizedEvents || []).length;
         // If no events, speak an explicit no-plans message for clarity
         if (n === 0) {
-          const noneTextRu = (lang && lang.startsWith('ru')) ? 'На завтра планов нет.' : 'You have no plans for tomorrow.';
-          if (onAnswerText) onAnswerText(noneTextRu);
-          try { await speak(noneTextRu, lang); } catch (e) { /* ignore */ }
+          // build contextual no-plans message depending on scope
+          let noneText = '';
+          if (lang && lang.startsWith('ru')) {
+            if (interp.scope === 'single_day') noneText = 'На заданный день планов нет.';
+            else noneText = 'На указанный период планов нет.';
+          } else {
+            if (interp.scope === 'single_day') noneText = 'You have no plans for the requested day.';
+            else noneText = 'You have no plans for the requested period.';
+          }
+          if (onAnswerText) onAnswerText(noneText);
+          try { await speak(noneText, lang); } catch (e) { /* ignore */ }
           if (onTtsDone) onTtsDone();
-          return noneTextRu;
+          return noneText;
         }
 
         // Build a short deterministic summary (Russian/English)
@@ -367,7 +405,15 @@ class VoiceSearchService {
           return '';
         };
 
-        const header = (lang && lang.startsWith('ru')) ? `На завтра у вас запланировано ${n === 1 ? 'одно событие' : `${n} события`}.` : `You have ${n} events tomorrow.`;
+        // Header depends on scope: for single_day use localized wording, for range mention count
+        let header = '';
+        if (lang && lang.startsWith('ru')) {
+          if (interp.scope === 'single_day') header = `На заданный день у вас запланировано ${n === 1 ? 'одно событие' : `${n} события`}.`;
+          else header = `На указанный период у вас запланировано ${n} ${n === 1 ? 'событие' : 'события' }.`;
+        } else {
+          if (interp.scope === 'single_day') header = `You have ${n} ${n === 1 ? 'event' : 'events'} on the requested day.`;
+          else header = `You have ${n} events in the requested period.`;
+        }
         const parts = [header];
         for (const ev of normalizedEvents) {
           const time = makeTimeRange(ev);
@@ -379,11 +425,25 @@ class VoiceSearchService {
           }
         }
         const summaryText = parts.join(' ');
+        // Log the exact events and the summary that will be spoken so we can correlate logs
+        try {
+          const eventsForLog = (normalizedEvents || []).map(ev => ({ title: ev.summary || ev.title || '', localStartDate: ev.localStartDate || null, localStartTime: ev.localStartTime || null, isAllDay: !!ev.isAllDay, account: ev.account || ev.organizer || null }));
+          console.debug('[voiceSearch] eventsPassedToAnswerQuery=', eventsForLog);
+          try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ eventsPassedToAnswerQuery: eventsForLog }, null, 2), 'eventsPassed'); } catch (e) {}
+          try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('finalSpeech (deterministic): ' + summaryText); } catch (e) {}
+        } catch (e) { /* ignore logging failures */ }
         if (onAnswerText) onAnswerText(summaryText);
         try { await speak(summaryText, lang); } catch (e) { /* ignore */ }
         if (onTtsDone) onTtsDone();
         return summaryText;
       }
+
+      // Before calling the assistant, log the exact normalized events payload for auditing
+      try {
+        const eventsForLog = (normalizedEvents || []).map(ev => ({ id: ev.id || null, title: ev.summary || ev.title || '', localStartDate: ev.localStartDate || null, localStartTime: ev.localStartTime || null, isAllDay: !!ev.isAllDay, account: ev.account || ev.organizer || null }));
+        console.debug('[voiceSearch] about to call answerQuery with events=', eventsForLog);
+        try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ eventsForAnswerQuery: eventsForLog }, null, 2), 'eventsForAnswerQuery'); } catch (e) {}
+      } catch (e) { /* ignore */ }
 
       const answer = await geminiService.answerQuery(text, normalizedEvents, accounts, queryStart, queryEnd, { lang });
       const answerText = typeof answer === 'string' ? answer : String(answer);
@@ -391,6 +451,8 @@ class VoiceSearchService {
 
       // Use shared TTS helper which handles browser and main-process fallbacks
       try {
+        // Log final speech text for correlation with TTS logs
+        try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('finalSpeech: ' + answerText); } catch (e) {}
         await speak(answerText, lang);
         if (onTtsDone) onTtsDone();
       } catch (ttsErr) {
