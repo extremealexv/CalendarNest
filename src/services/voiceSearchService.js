@@ -184,11 +184,29 @@ class VoiceSearchService {
           /* ignore */
         }
 
-        // Decide behavior based on scope
-        if (interp.scope === 'single_day' && interp.startDate) {
-          // already set queryStart/queryEnd above
-          await fetchAndMerge(queryStart, queryEnd);
-        } else if (interp.scope === 'range' && interp.startDate && interp.endDate) {
+        // If the user asked broadly for the "next" occurrence (e.g. "when is my next dentist")
+        // enforce a deterministic long-range search from today to twelve months ahead.
+        try {
+          const textLower2 = (text || '').toString().toLowerCase();
+          const nextQueryRegex = /\b(next|when is my next|next appointment|next .*appointment|when is my|следующ)/i;
+          if ((interp && interp.scope === 'next_occurrence') || nextQueryRegex.test(textLower2)) {
+            const s = new Date(); s.setHours(0,0,0,0);
+            const e = new Date(s); e.setMonth(e.getMonth() + 12);
+            // Set the effective query range so subsequent filtering will consider the full window
+            queryStart = s; queryEnd = e;
+            try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ forcedNextSearch: { start: s.toISOString(), end: e.toISOString(), text: text } }, null, 2), 'forcedNextSearch'); } catch (e) {}
+            await fetchAndMerge(s, e);
+          }
+        } catch (nxErr) { /* ignore */ }
+
+        // Decide behavior based on scope. Always attempt to fetch for the
+        // interpreter-computed date range if available. This ensures we do not
+        // rely only on 'events' passed from the current UI view.
+        if (queryStart && queryEnd) {
+          try {
+            // log the explicit fetch range for auditing
+            try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeCalled: { start: queryStart.toISOString(), end: queryEnd.toISOString() } }, null, 2), 'fetchAndMergeCalled'); } catch (e) {}
+          } catch (e) {}
           await fetchAndMerge(queryStart, queryEnd);
         } else if (interp.scope === 'from_today' || interp.scope === 'next_occurrence') {
           // broad search from today to 12 months to find matches
@@ -358,6 +376,64 @@ class VoiceSearchService {
         } catch (e) { /* ignore and return original */ }
         return ev;
       });
+
+          // If we normalized and have no events but the user asked for a next_occurrence
+          // or for results from today onward, perform a broader twelve-month search as a
+          // safety net (this helps queries like "when is my next dentist appointment").
+          if ((normalizedEvents || []).length === 0) {
+            try {
+              const textLower = (text || '').toString().toLowerCase();
+              const nextIntent = (interp && (interp.scope === 'next_occurrence' || interp.scope === 'from_today')) || /\b(next|when is my next|следующ)/i.test(textLower);
+              if (nextIntent) {
+                const s = new Date(); s.setHours(0,0,0,0);
+                const e = new Date(s); e.setMonth(e.getMonth() + 12);
+                try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeFallback: { start: s.toISOString(), end: e.toISOString() } }, null, 2), 'fetchAndMergeFallback'); } catch (e) {}
+                await fetchAndMerge(s, e);
+                // recompute normalizedEvents from effectiveEvents after the broader fetch
+                const recomputed = (effectiveEvents || []).map(ev => {
+                  try {
+                    const isAllDay = !!(ev.start && ev.start.date && !ev.start.dateTime);
+                    let out = { ...ev };
+                    if (isAllDay) {
+                      const day = ev.start.date;
+                      out = { ...out, start: { date: day }, end: { date: day }, isAllDay: true };
+                      out.localStartDate = day; out.localStartTime = '00:00'; out.localEndDate = day; out.localEndTime = '23:59';
+                    }
+                    try {
+                      const tz = Intl && Intl.DateTimeFormat ? Intl.DateTimeFormat().resolvedOptions().timeZone : undefined;
+                      out.localTimezone = tz || null;
+                      const startStr = ev.start && (ev.start.dateTime || ev.start.date);
+                      const endStr = ev.end && (ev.end.dateTime || ev.end.date);
+                      const parseAndFill = (s2) => {
+                        if (!s2) return { d: null, t: null };
+                        const dt = safeParse(s2);
+                        if (!dt) return { d: null, t: null };
+                        const y = dt.getFullYear();
+                        const m = String(dt.getMonth() + 1).padStart(2, '0');
+                        const day = String(dt.getDate()).padStart(2, '0');
+                        const hh = String(dt.getHours()).padStart(2, '0');
+                        const mm = String(dt.getMinutes()).padStart(2, '0');
+                        return { d: `${y}-${m}-${day}`, t: `${hh}:${mm}` };
+                      };
+                      const sVals = parseAndFill(startStr);
+                      const eVals = parseAndFill(endStr);
+                      if (!isAllDay) {
+                        if (sVals.d) out.localStartDate = sVals.d;
+                        if (sVals.t) out.localStartTime = sVals.t;
+                        if (eVals.d) out.localEndDate = eVals.d;
+                        if (eVals.t) out.localEndTime = eVals.t;
+                      }
+                    } catch (inner) {}
+                    return out;
+                  } catch (e) { return ev; }
+                });
+                // assign normalizedEvents to the recomputed set for subsequent processing
+                // (we intentionally mutate the variable used below)
+                // eslint-disable-next-line no-unused-expressions
+                normalizedEvents.length = 0; normalizedEvents.push(...recomputed);
+              }
+            } catch (e) { /* ignore fallback errors */ }
+          }
 
       // If this is a single-day query and we already have normalized events,
       // or a short range (up to seven days), produce a deterministic local summary
