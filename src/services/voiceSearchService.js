@@ -133,19 +133,40 @@ class VoiceSearchService {
   // Helper to fetch events for a range across accounts and merge
         const fetchAndMerge = async (s, e) => {
           const fetched = [];
-          for (const acct of accounts || []) {
+          // If caller did not pass accounts, fall back to any loaded accounts in the calendar service
+          const acctList = (accounts && accounts.length) ? accounts : (googleCalendarService.getAccounts ? googleCalendarService.getAccounts() : []);
+          if (!acctList || acctList.length === 0) {
+            console.debug('[voiceSearch] fetchAndMerge: no accounts available to fetch events');
+            try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeNoAccounts: true }, null, 2), 'fetchAndMerge'); } catch (e) {}
+            return;
+          }
+
+          try {
+            try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeRequest: { accounts: acctList.map(a=>a.id||a.email||a) , start: s ? s.toISOString() : null, end: e ? e.toISOString() : null } }, null, 2), 'fetchAndMerge'); } catch (e) {}
+          } catch (logErr) {}
+
+          for (const acct of acctList) {
             try {
-              const evs = await googleCalendarService.getEvents(acct.id, s, e);
+              const acctId = acct && (acct.id || acct.accountId || acct.email) || acct;
+              const evs = await googleCalendarService.getEvents(acctId, s, e);
               if (evs && evs.length) fetched.push(...evs);
-            } catch (e) {
-              console.warn('[voiceSearch] prefetch events failed for', acct.id, e && e.message);
+            } catch (errFetch) {
+              console.warn('[voiceSearch] prefetch events failed for', acct && (acct.id || acct.email) , errFetch && errFetch.message);
             }
           }
-          if (fetched.length) {
-            const map = new Map();
-            (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
-            fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
-            effectiveEvents = Array.from(map.values());
+
+          try {
+            if (fetched.length) {
+              const map = new Map();
+              (effectiveEvents || []).forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
+              fetched.forEach(ev => { if (ev && ev.id) map.set(ev.id, ev); });
+              effectiveEvents = Array.from(map.values());
+              try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeResultCount: fetched.length }, null, 2), 'fetchAndMerge'); } catch (e) {}
+            } else {
+              try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ fetchAndMergeResultCount: 0 }, null, 2), 'fetchAndMerge'); } catch (e) {}
+            }
+          } catch (mergeErr) {
+            console.warn('[voiceSearch] fetchAndMerge merge failed', mergeErr);
           }
         };
 
