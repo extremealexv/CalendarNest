@@ -903,3 +903,39 @@ ipcMain.handle('speak-text', async (event, { text, lang = 'en' }) => {
     }
   });
 });
+
+// Proxy transcription requests from renderer to local server to avoid CORS issues.
+ipcMain.handle('proxy-transcribe', async (event, { data, filename = 'recording.webm', serverUrl = 'http://127.0.0.1:5000/transcribe' }) => {
+  try {
+    if (!data) return { success: false, error: 'no data' };
+    // Create temp file
+    const tmpDir = require('os').tmpdir();
+    const tmpPath = path.join(tmpDir, `famsync_proxy_${Date.now()}_${Math.floor(Math.random()*10000)}_${filename}`);
+    // decode base64
+    const buffer = Buffer.from(data, 'base64');
+    fs.writeFileSync(tmpPath, buffer);
+
+    // Use curl to POST multipart form (robust across environments)
+    const { spawnSync } = require('child_process');
+    const args = ['-s', '-X', 'POST', '-F', `file=@${tmpPath}`, serverUrl];
+    const curl = spawnSync('curl', args, { encoding: 'utf8', maxBuffer: 10 * 1024 * 1024 });
+    // cleanup
+    try { fs.unlinkSync(tmpPath); } catch (e) {}
+
+    if (curl.error) {
+      return { success: false, error: String(curl.error) };
+    }
+    const out = (curl.stdout || '').toString();
+    const errOut = (curl.stderr || '').toString();
+    if (errOut && !out) return { success: false, error: errOut };
+    try {
+      const parsed = JSON.parse(out);
+      return { success: true, ...parsed };
+    } catch (jsonErr) {
+      // return raw output if not JSON
+      return { success: true, text: out };
+    }
+  } catch (e) {
+    return { success: false, error: String(e) };
+  }
+});

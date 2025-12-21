@@ -309,6 +309,8 @@ const MonthView = ({
             analyserRef.current = { analyser, ctx };
             const data = new Uint8Array(analyser.fftSize);
             let running = true;
+            // keep a local last-measured RMS to avoid reading stale React state
+            let lastMeasuredRms = 0;
             const read = () => {
               if (!running) return;
               try {
@@ -324,6 +326,7 @@ const MonthView = ({
                 sum += v * v;
               }
               const curRms = Math.sqrt(sum / data.length);
+              lastMeasuredRms = curRms;
               setRms(curRms);
               requestAnimationFrame(read);
             };
@@ -337,8 +340,9 @@ const MonthView = ({
               analyserRef.current = null;
               audioStreamRef.current = null;
               setTesting(false);
-              // If RMS too low, surface a helpful hint
-              if (rms <= 0.001) {
+              // If RMS too low, surface a helpful hint. Use the lastMeasuredRms
+              // captured in the audio-reading loop to avoid React state timing issues.
+              if (lastMeasuredRms <= 0.001) {
                 setLastTranscript('Mic test finished — no audio detected (RMS≈0). Check mic, ALSA/PulseAudio, or try another device.');
               } else {
                 setLastTranscript('Mic test finished — audio detected.');

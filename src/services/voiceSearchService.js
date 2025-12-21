@@ -93,6 +93,30 @@ class VoiceSearchService {
       return data.text || '';
     } catch (err) {
       console.error('[voiceSearch] transcribeWithServer failed', err);
+      // Try a main-process proxy fallback if available (avoids CORS/network issues)
+      try {
+        if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.proxyTranscribe === 'function') {
+          try {
+            const ab = await blob.arrayBuffer();
+            let binary = '';
+            const bytes = new Uint8Array(ab);
+            const chunkSize = 0x8000;
+            for (let i = 0; i < bytes.length; i += chunkSize) {
+              const chunk = bytes.subarray(i, i + chunkSize);
+              binary += String.fromCharCode.apply(null, Array.from(chunk));
+            }
+            const b64 = btoa(binary);
+            const proxyRes = await window.electronAPI.proxyTranscribe({ data: b64, filename: 'recording.webm', serverUrl });
+            if (proxyRes && proxyRes.success) {
+              return proxyRes.text || '';
+            }
+            throw new Error(proxyRes && proxyRes.error ? proxyRes.error : 'proxy transcription failed');
+          } catch (proxyErr) {
+            console.error('[voiceSearch] proxy transcribe failed', proxyErr);
+            throw proxyErr;
+          }
+        }
+      } catch (e) { /* ignore proxy fallback errors */ }
       throw err;
     }
   }
