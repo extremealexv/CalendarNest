@@ -1,0 +1,10 @@
+.accounts-manager-modal { position: fixed; left:0; right:0; top:0; bottom:0; background: rgba(0,0,0,0.5); display:flex; align-items:center; justify-content:center; z-index:1000; }
+.modal-content { background: #fff; padding: 16px; border-radius:6px; width: 800px; max-height: 80vh; overflow:auto; }
+.account-row { display:flex; justify-content:space-between; align-items:flex-start; padding:8px 0; border-bottom: 1px solid #eee; }
+.account-name { font-weight:600; }
+.account-email { color:#666; font-size:12px; margin-left:8px; }
+.fields input { display:block; margin-top:6px; width: 100%; padding:6px; }
+.right { display:flex; gap:8px; }
+.actions { margin-top:12px; text-align:right; }
+.btn-small { padding:6px 8px; }
+.btn-danger { background:#e53935; color:#fff; border:none; }

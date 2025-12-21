@@ -9,6 +9,7 @@ import CalendarView from './components/CalendarView';
 import AuthScreen from './components/AuthScreen';
 import LoadingScreen from './components/LoadingScreen';
 import AddAccountModal from './components/AddAccountModal';
+import AccountsManagerModal from './components/AccountsManagerModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
 
@@ -158,6 +159,7 @@ function App() {
 
   const [showAddModal, setShowAddModal] = useState(false);
   const [keyboardVisible, setKeyboardVisible] = useState(false);
+  const [showAccountsModal, setShowAccountsModal] = useState(false);
 
   useEffect(() => {
     const onFocusIn = (e) => {
@@ -252,7 +254,7 @@ function App() {
       // accountWithNickname is returned from modal after auth and nickname
       // Persist nickname metadata
       if (accountWithNickname && accountWithNickname.id) {
-        await googleCalendarService.saveAccountMeta(accountWithNickname.id, { nickname: accountWithNickname.nickname });
+        await googleCalendarService.saveAccountMeta(accountWithNickname.id, { nickname: accountWithNickname.nickname, alias_ru: accountWithNickname.alias_ru || '', alias_en: accountWithNickname.alias_en || '' });
       }
       // Add to UI and reload calendars
       await handleAuthentication(accountWithNickname);
@@ -260,6 +262,35 @@ function App() {
       console.error('Failed to finalize added account', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleManageAccounts = () => {
+    setShowAccountsModal(true);
+  };
+
+  const handleSaveAccountMeta = async (accountId, meta) => {
+    try {
+      setLoading(true);
+      await googleCalendarService.saveAccountMeta(accountId, meta);
+      // update local accounts state
+      const updated = accounts.map(acc => acc.id === accountId ? { ...acc, ...meta } : acc);
+      setAccounts(updated);
+      // reload calendar data to reflect any changes if needed
+      await loadCalendarData(updated, selectedDate, currentView);
+    } catch (err) {
+      console.error('Failed to save account meta', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRemoveAccount = async (accountId) => {
+    try {
+      // remove from auth service & persistent store
+      await handleLogout(accountId);
+    } catch (err) {
+      console.error('Failed to remove account', err);
     }
   };
 
@@ -336,6 +367,7 @@ function App() {
         onViewChange={handleViewChange}
         onAddAccount={handleAddAccount}
         onSaveNickname={handleSaveNickname}
+        onManageAccounts={handleManageAccounts}
         currentView={currentView}
         selectedDate={selectedDate}
         onDateChange={handleDateChange}
@@ -346,6 +378,17 @@ function App() {
             isOpen={showAddModal}
             onClose={() => setShowAddModal(false)}
             onComplete={handleAddModalComplete}
+          />
+        </ErrorBoundary>
+      )}
+      {showAccountsModal && (
+        <ErrorBoundary>
+          <AccountsManagerModal
+            isOpen={showAccountsModal}
+            accounts={accounts}
+            onClose={() => setShowAccountsModal(false)}
+            onSave={handleSaveAccountMeta}
+            onRemove={handleRemoveAccount}
           />
         </ErrorBoundary>
       )}

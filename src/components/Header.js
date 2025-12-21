@@ -12,7 +12,8 @@ const Header = ({
   selectedDate, 
   onDateChange,
   onAddAccount,
-  onSaveNickname
+  onSaveNickname,
+  onManageAccounts
 }) => {
   const [editingId, setEditingId] = React.useState(null);
   const [editingValue, setEditingValue] = React.useState('');
@@ -128,6 +129,9 @@ const Header = ({
               <button className="btn btn-secondary add-account-btn" onClick={() => onAddAccount && onAddAccount()}>
                 + Add Account
               </button>
+                <button className="btn btn-secondary" style={{ marginLeft: 8 }} onClick={() => onManageAccounts && onManageAccounts()}>
+                  Manage Accounts
+                </button>
               <div className="dropdown-divider"></div>
               {accounts.map(account => (
                 <div key={account.id} className="account-item">

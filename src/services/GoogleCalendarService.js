@@ -594,6 +594,9 @@ class GoogleCalendarService {
       const acc = this.accounts.get(accountId);
       if (acc) {
         acc.nickname = meta.nickname || acc.nickname || '';
+        // support aliases in both languages
+        if (meta.alias_ru !== undefined) acc.alias_ru = meta.alias_ru || '';
+        if (meta.alias_en !== undefined) acc.alias_en = meta.alias_en || '';
         this.accounts.set(accountId, acc);
       }
       return true;

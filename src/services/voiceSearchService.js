@@ -198,6 +198,26 @@ class VoiceSearchService {
           }
         };
 
+        // Alias detection: if user mentioned a known alias/nickname/name in the query text,
+        // restrict subsequent fetches to those matching accounts (supports alias_ru/alias_en/nickname/name/email).
+        try {
+          const storedAccounts = (accounts && accounts.length) ? accounts : (googleCalendarService.getAccounts ? googleCalendarService.getAccounts() : []);
+          const txt = (text || '').toString().toLowerCase();
+          const matched = (storedAccounts || []).filter(acc => {
+            try {
+              const cand = [ (acc.alias_en||''), (acc.alias_ru||''), (acc.nickname||''), (acc.name||''), (acc.email||'') ]
+                .map(s => (s || '').toString().toLowerCase())
+                .filter(Boolean);
+              return cand.some(c => txt.includes(c));
+            } catch (e) { return false; }
+          });
+          if (matched && matched.length) {
+            // narrow the accounts variable used by fetchAndMerge to the selected accounts
+            accounts = matched;
+            try { if (typeof window !== 'undefined' && window.electronAPI && typeof window.electronAPI.geminiLog === 'function') window.electronAPI.geminiLog(JSON.stringify({ aliasFilteredAccounts: matched.map(a=>a.id) }, null, 2), 'aliasFilter'); } catch (e) {}
+          }
+        } catch (e) { /* ignore alias detection failures */ }
+
         // If Gemini didn't provide explicit start/end but the user asked about
         // 'next week' / 'this week' (or Russian equivalents), compute a precise
         // Monday-Sunday range and use that.

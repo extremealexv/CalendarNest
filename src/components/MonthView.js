@@ -4,6 +4,7 @@ import './MonthView.css';
 import { voiceSearchService } from '../services/voiceSearchService';
 import { geminiService } from '../services/GeminiService';
 import { safeParse, safeFormat } from '../utils/dateUtils';
+import { storageUtils } from '../utils/storage';
 
 const MonthView = ({ 
   events, 
@@ -40,11 +41,27 @@ const MonthView = ({
         }));
         console.debug('initial enumerateDevices audioinputs', inputs);
         setDevices(inputs);
+        // restore previously selected mic if available
+        try {
+          const saved = storageUtils.getSelectedMic();
+          if (saved) {
+            // ensure the saved device is present in current inputs
+            const found = inputs.find(d => d.deviceId === saved);
+            if (found) setSelectedDeviceId(saved);
+          }
+        } catch (e) { /* ignore */ }
       } catch (err) {
         console.warn('initial enumerateDevices failed', err);
       }
     })();
   }, []);
+
+  // Persist selected device across refreshes
+  React.useEffect(() => {
+    try {
+      storageUtils.saveSelectedMic(selectedDeviceId);
+    } catch (e) { /* ignore */ }
+  }, [selectedDeviceId]);
 
   const handleStartVoice = () => {
     setLastTranscript('');
