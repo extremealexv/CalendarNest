@@ -9,6 +9,8 @@ class WakeWordService {
     this.stateListeners = new Set();
     this.wakeWords = defaultWakeWords;
     this.lang = 'en-US';
+    this._starting = false;
+    this._stoppedByUser = false;
   }
 
   addWakeListener(cb) { this.wakeListeners.add(cb); }
@@ -20,7 +22,7 @@ class WakeWordService {
   _emitState() { for (const cb of Array.from(this.stateListeners)) try { cb(this.listening); } catch (e) {} }
 
   start({ lang = 'en-US', wakeWords } = {}) {
-    if (this.listening) return;
+    if (this.listening || this._starting) return;
     this.lang = lang || this.lang;
     if (wakeWords && wakeWords.length) this.wakeWords = wakeWords;
 
@@ -31,28 +33,39 @@ class WakeWordService {
     }
 
     try {
+      this._starting = true;
+      this._stoppedByUser = false;
       this.recognition = new SpeechRecognition();
       this.recognition.lang = this.lang;
       this.recognition.interimResults = true;
       this.recognition.continuous = true;
+      this.recognition.maxAlternatives = 1;
 
-      let interimTranscript = '';
       this.recognition.onresult = (ev) => {
+        // build final + interim transcripts for this result event
         let full = '';
+        let interim = '';
         for (let i = ev.resultIndex; i < ev.results.length; ++i) {
           const res = ev.results[i];
           const t = res[0] && res[0].transcript ? res[0].transcript : '';
           if (res.isFinal) full += t + ' ';
-          else interimTranscript += t + ' ';
+          else interim += t + ' ';
         }
-        const text = (full + ' ' + interimTranscript).trim().toLowerCase();
-        // check if any wake word appears as a separate token or substring
+        const text = (full + ' ' + interim).trim().toLowerCase();
+        try {
+          if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
+            window.electronAPI.rendererLog('[wakeWord] onresult text=' + text + ' full=' + full + ' interim=' + interim);
+          }
+        } catch (e) {}
+
         if (text) {
           for (const w of this.wakeWords) {
             try {
-              if (text.includes(w.toLowerCase())) {
-                // emit and clear interim to avoid repeated triggers
-                interimTranscript = '';
+              const wLower = (w || '').toLowerCase();
+              // use word-boundary matching to avoid accidental substring matches
+              const esc = wLower.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+              const pattern = new RegExp('\\b' + esc + '\\b', 'i');
+              if (pattern.test(text)) {
                 this._emitWake({ word: w, text });
                 break;
               }
@@ -61,15 +74,36 @@ class WakeWordService {
         }
       };
 
-      this.recognition.onstart = () => { this.listening = true; this._emitState(); };
-      this.recognition.onend = () => { this.listening = false; this._emitState();
-        // auto-restart for persistence
-        try { setTimeout(() => { if (!this.listening) this.start({ lang: this.lang, wakeWords: this.wakeWords }); }, 300); } catch (e) {}
+      this.recognition.onstart = () => { this._starting = false; this.listening = true; this._emitState(); };
+      this.recognition.onend = () => {
+        // onend can be raised by the implementation on errors or silence.
+        this._starting = false;
+        this.listening = false;
+        this._emitState();
+        // auto-restart only if not explicitly stopped by stop()
+        if (!this._stoppedByUser) {
+          try { setTimeout(() => { if (!this.listening) this.start({ lang: this.lang, wakeWords: this.wakeWords }); }, 1000); } catch (e) {}
+        }
       };
-      this.recognition.onerror = (e) => { console.warn('[wakeWord] recognition error', e); };
-      try { this.recognition.start(); } catch (e) { console.warn('[wakeWord] start threw', e); }
+
+      this.recognition.onerror = (e) => {
+        try { console.warn('[wakeWord] recognition error', e && (e.error || e.message || e)); } catch (ex) {}
+        try {
+          if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
+            window.electronAPI.rendererLog('[wakeWord] recognition error ' + JSON.stringify({ error: e && e.error, message: e && e.message }));
+          }
+        } catch (ex) {}
+        // stop and restart with a small backoff to avoid tight error loops
+        try { this.recognition.stop(); } catch (ex) {}
+        if (!this._stoppedByUser) {
+          setTimeout(() => { try { this.start({ lang: this.lang, wakeWords: this.wakeWords }); } catch (ex) {} }, 1500);
+        }
+      };
+
+      try { this.recognition.start(); } catch (e) { console.warn('[wakeWord] start threw', e); this._starting = false; }
     } catch (e) {
       console.warn('[wakeWord] failed to start', e);
+      this._starting = false;
     }
   }
 
