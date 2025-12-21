@@ -12,6 +12,7 @@ import AddAccountModal from './components/AddAccountModal';
 import AccountsManagerModal from './components/AccountsManagerModal';
 import ErrorBoundary from './components/ErrorBoundary';
 import OnScreenKeyboard from './components/OnScreenKeyboard';
+import { wakeWordService } from './services/wakeWordService';
 
 // Import services
 import { googleCalendarService } from './services/GoogleCalendarService';
@@ -47,6 +48,28 @@ function App() {
         }
       })();
     }
+  }, []);
+
+  // Start wake word listening once app is ready. Emit a DOM event when wake is detected
+  useEffect(() => {
+    try {
+      wakeWordService.addStateListener((listening) => {
+        try { console.debug('[App] wakeWord listening=', listening); } catch (e) {}
+      });
+      wakeWordService.addWakeListener(() => {
+        try {
+          // dispatch a global event that MonthView listens for to start the normal voice flow
+          window.dispatchEvent(new CustomEvent('famsync:trigger-voice-search'));
+        } catch (e) { console.debug('wake event dispatch failed', e); }
+      });
+      // start with default language; keep running
+      wakeWordService.start({ lang: 'ru-RU' });
+    } catch (e) {
+      console.debug('Failed to start wakeWordService', e);
+    }
+    return () => {
+      try { wakeWordService.stop(); } catch (e) {}
+    };
   }, []);
 
   const initializeApp = async () => {

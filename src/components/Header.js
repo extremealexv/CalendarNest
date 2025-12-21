@@ -15,6 +15,19 @@ const Header = ({
   onSaveNickname,
   onManageAccounts
 }) => {
+  // Add a simple listening indicator state via prop if passed (App may add later)
+  const [wakeListening, setWakeListening] = React.useState(false);
+  React.useEffect(() => {
+    // If global wakeWordService exists, subscribe to its state events
+    try {
+      const svc = require('../services/wakeWordService').wakeWordService;
+      if (svc && typeof svc.addStateListener === 'function') {
+        const cb = (s) => setWakeListening(!!s);
+        svc.addStateListener(cb);
+        return () => { try { svc.removeStateListener(cb); } catch (e) {} };
+      }
+    } catch (e) { /* ignore */ }
+  }, []);
   const [editingId, setEditingId] = React.useState(null);
   const [editingValue, setEditingValue] = React.useState('');
   const handleDateNavigation = (direction) => {
@@ -98,6 +111,9 @@ const Header = ({
       </div>
 
       <div className="header-right">
+        <div style={{ display: 'flex', alignItems: 'center', marginRight: 12 }}>
+          <div className={`wake-indicator ${wakeListening ? 'on' : 'off'}`} title={wakeListening ? 'Listening for wake word' : 'Wake word listener inactive'} />
+        </div>
         <div className="view-switcher">
           <button
             className={`btn view-btn ${currentView === 'day' ? 'active' : ''}`}

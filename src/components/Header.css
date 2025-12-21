@@ -171,6 +171,17 @@
   gap: 20px;
 }
 
+/* Wake indicator dot */
+.wake-indicator {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #ccc;
+  box-shadow: 0 0 6px rgba(0,0,0,0.12);
+}
+.wake-indicator.on { background: #4caf50; box-shadow: 0 0 8px rgba(76,175,80,0.7); }
+.wake-indicator.off { background: #cfcfcf; }
+
 /* View Switcher */
 .view-switcher {
   display: flex;
@@ -303,6 +314,20 @@
   border-radius: 8px;
   display: inline-block;
   margin-right: 8px;
+}
+
+/* Make the first-level buttons inside the dropdown share equal width
+   so "Add Account" and "Manage Accounts" look consistent. Use the
+   child selector so buttons inside account rows are not affected. */
+.dropdown-content > .btn {
+  display: inline-block;
+  width: calc(50% - 8px);
+  box-sizing: border-box;
+  text-align: center;
+  padding: 8px 12px;
+}
+.dropdown-content > .btn:first-child {
+  margin-right: 16px;
 }
 .dropdown-content .account-item {
   background: transparent;

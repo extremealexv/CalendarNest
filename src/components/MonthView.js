@@ -161,6 +161,20 @@ const MonthView = ({
       })();
     }
   };
+
+  // Listen for global trigger dispatched when wake word is detected
+  React.useEffect(() => {
+    const handler = () => {
+      try {
+        // If we're already actively listening, ignore the wake trigger
+        if (listening) return;
+        // small visual indicator: set listening true while voice flow runs
+        handleStartVoice();
+      } catch (e) { console.debug('wake trigger handler failed', e); }
+    };
+    window.addEventListener('famsync:trigger-voice-search', handler);
+    return () => window.removeEventListener('famsync:trigger-voice-search', handler);
+  }, [listening, selectedDeviceId, inputLang, outputLang, events, accounts, selectedDate]);
   const monthStart = startOfMonth(selectedDate);
   const monthEnd = endOfMonth(selectedDate);
   const startDate = startOfWeek(monthStart);
