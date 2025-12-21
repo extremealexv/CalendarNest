@@ -1,5 +1,15 @@
 // wakeWordService: listens using Web Speech API for a wake word and notifies listeners
 const defaultWakeWords = ['calendar', 'календарь', 'календар'];
+// prefer lazy import of voiceSearchService for VOSK fallback
+let _voiceSearchService = null;
+const getVoiceSearchService = () => {
+  try {
+    if (!_voiceSearchService) _voiceSearchService = require('./voiceSearchService').voiceSearchService;
+    return _voiceSearchService;
+  } catch (e) {
+    return null;
+  }
+};
 
 class WakeWordService {
   constructor() {
@@ -11,6 +21,8 @@ class WakeWordService {
     this.lang = 'en-US';
     this._starting = false;
     this._stoppedByUser = false;
+    this._usingVoskFallback = false;
+    this._voskLoopRunning = false;
   }
 
   addWakeListener(cb) { this.wakeListeners.add(cb); }
@@ -93,7 +105,17 @@ class WakeWordService {
             window.electronAPI.rendererLog('[wakeWord] recognition error ' + JSON.stringify({ error: e && e.error, message: e && e.message }));
           }
         } catch (ex) {}
-        // stop and restart with a small backoff to avoid tight error loops
+        // If error is network-related, switch to a short VOSK-based polling fallback
+        const code = e && (e.error || e.code || (e.message && e.message.toLowerCase()));
+        if (code && code.toString().toLowerCase().includes('network')) {
+          try {
+            if (!this._voskLoopRunning) this._startVoskFallbackLoop();
+          } catch (ex) {}
+          // stop the speech recog instance to avoid repeated network attempts
+          try { this.recognition.stop(); } catch (ex) {}
+          return;
+        }
+        // otherwise, stop and restart with a small backoff to avoid tight error loops
         try { this.recognition.stop(); } catch (ex) {}
         if (!this._stoppedByUser) {
           setTimeout(() => { try { this.start({ lang: this.lang, wakeWords: this.wakeWords }); } catch (ex) {} }, 1500);
@@ -109,14 +131,67 @@ class WakeWordService {
 
   stop() {
     try {
+      this._stoppedByUser = true;
       if (this.recognition) {
         try { this.recognition.onresult = null; } catch (e) {}
+        try { this.recognition.onend = null; } catch (e) {}
+        try { this.recognition.onerror = null; } catch (e) {}
         try { this.recognition.stop(); } catch (e) {}
         this.recognition = null;
       }
+      // stop any running VOSK fallback loop
+      this._usingVoskFallback = false;
     } catch (e) {}
     this.listening = false;
     this._emitState();
+  }
+
+  async _startVoskFallbackLoop() {
+    const svc = getVoiceSearchService();
+    if (!svc || typeof svc.recordAudio !== 'function' || typeof svc.transcribeWithServer !== 'function') {
+      try { window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function' && window.electronAPI.rendererLog('[wakeWord] VOSK fallback not available'); } catch (e) {}
+      return;
+    }
+    this._voskLoopRunning = true;
+    this._usingVoskFallback = true;
+    try {
+      while (this._usingVoskFallback && !this._stoppedByUser) {
+        try {
+          // record a short clip (1.2s) to check for wake word
+          const blob = await svc.recordAudio({ ms: 1200 });
+          // try local VOSK server
+          let txt = '';
+          try {
+            txt = await svc.transcribeWithServer(blob);
+          } catch (transErr) {
+            try { window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function' && window.electronAPI.rendererLog('[wakeWord] VOSK transcribe failed ' + (transErr && transErr.message || transErr)); } catch (e) {}
+          }
+          if (txt) {
+            try { if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[wakeWord] VOSK onresult text=' + txt); } catch (e) {}
+            const text = (txt || '').toString().toLowerCase();
+            for (const w of this.wakeWords) {
+              try {
+                const esc = (w || '').toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const pattern = new RegExp('\\b' + esc + '\\b', 'i');
+                if (pattern.test(text)) {
+                  this._emitWake({ word: w, text });
+                  // after a successful wake, wait a short cooldown before continuing
+                  await new Promise(r => setTimeout(r, 1200));
+                  break;
+                }
+              } catch (e) {}
+            }
+          }
+        } catch (recErr) {
+          try { window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function' && window.electronAPI.rendererLog('[wakeWord] VOSK record error ' + (recErr && recErr.message || recErr)); } catch (e) {}
+        }
+        // small pause between polls
+        await new Promise(r => setTimeout(r, 300));
+      }
+    } finally {
+      this._voskLoopRunning = false;
+      this._usingVoskFallback = false;
+    }
   }
 }
 
