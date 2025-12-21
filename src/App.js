@@ -56,10 +56,16 @@ function App() {
       wakeWordService.addStateListener((listening) => {
         try { console.debug('[App] wakeWord listening=', listening); } catch (e) {}
       });
-      wakeWordService.addWakeListener(() => {
+      wakeWordService.addWakeListener((payload) => {
         try {
+          // log receipt of wake event for debugging
+          try {
+            if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[App] wake event received ' + JSON.stringify(payload));
+          } catch (e) {
+            // ignore logging errors
+          }
           // dispatch a global event that MonthView listens for to start the normal voice flow
-          window.dispatchEvent(new CustomEvent('famsync:trigger-voice-search'));
+          window.dispatchEvent(new CustomEvent('famsync:trigger-voice-search', { detail: payload }));
         } catch (e) { console.debug('wake event dispatch failed', e); }
       });
       // start with default language; keep running

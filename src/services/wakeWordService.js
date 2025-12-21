@@ -30,7 +30,19 @@ class WakeWordService {
   addStateListener(cb) { this.stateListeners.add(cb); }
   removeStateListener(cb) { this.stateListeners.delete(cb); }
 
-  _emitWake(payload) { for (const cb of Array.from(this.wakeListeners)) try { cb(payload); } catch (e) {} }
+  _emitWake(payload) {
+    try {
+      if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
+        try {
+          window.electronAPI.rendererLog('[wakeWord] emitWake ' + JSON.stringify(payload));
+        } catch (e) {
+          // stringify may fail for circular objects
+          window.electronAPI.rendererLog('[wakeWord] emitWake');
+        }
+      }
+    } catch (e) {}
+    for (const cb of Array.from(this.wakeListeners)) try { cb(payload); } catch (e) {}
+  }
   _emitState() { for (const cb of Array.from(this.stateListeners)) try { cb(this.listening); } catch (e) {} }
 
   start({ lang = 'en-US', wakeWords } = {}) {
