@@ -271,6 +271,40 @@
   display: block;
 }
 
+/* Ensure buttons inside dropdown are compact and readable (override global .btn)
+   so the dropdown doesn't render huge green sticky buttons or white-on-white text. */
+.dropdown-content {
+  color: #333;
+}
+.dropdown-content .btn {
+  /* make dropdown buttons compact */
+  min-width: auto;
+  min-height: auto;
+  padding: 8px 12px;
+  font-size: 14px;
+  background: transparent;
+  color: #333;
+  border-radius: 8px;
+  box-shadow: none;
+}
+.dropdown-content .btn-secondary {
+  /* subtle blue pill for secondary actions inside the dropdown */
+  background: #2196F3;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+}
+.dropdown-content .add-account-btn {
+  background: transparent;
+  color: #333;
+  font-weight: 600;
+  padding: 8px 0;
+}
+.dropdown-content .account-item {
+  background: transparent;
+  padding: 10px 6px;
+}
+
 .account-item {
   display: flex;
   align-items: center;
