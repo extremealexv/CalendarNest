@@ -20,7 +20,12 @@ const MonthView = ({
   const [lastTranscript, setLastTranscript] = React.useState('');
   const [lastAnswer, setLastAnswer] = React.useState('');
   const [devices, setDevices] = React.useState([]);
-  const [selectedDeviceId, setSelectedDeviceId] = React.useState('');
+  const [selectedDeviceId, setSelectedDeviceId] = React.useState(() => {
+    try {
+      const saved = storageUtils.getSelectedMic();
+      return saved || '';
+    } catch (e) { return ''; }
+  });
   const [testing, setTesting] = React.useState(false);
   const [rms, setRms] = React.useState(0);
   const analyserRef = React.useRef(null);
@@ -283,6 +288,10 @@ const MonthView = ({
         <label style={{ margin: '0 8px' }}>Mic:</label>
         <select value={selectedDeviceId} onChange={(e) => setSelectedDeviceId(e.target.value)} style={{ minWidth: 220 }}>
           <option value="">(default)</option>
+          {/* If a saved device is present but not enumerated, show it as a disabled informative option */}
+          {selectedDeviceId && selectedDeviceId !== '' && !devices.find(d => d.deviceId === selectedDeviceId) ? (
+            <option key={`saved-${selectedDeviceId}`} value={selectedDeviceId}>{`Saved: ${selectedDeviceId} (not connected)`}</option>
+          ) : null}
           {devices.map((d, i) => (
             <option key={`${d.deviceId}-${i}`} value={d.deviceId}>{`${d.label} — ${d.deviceId}`}</option>
           ))}

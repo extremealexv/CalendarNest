@@ -295,10 +295,14 @@
   border-radius: 8px;
 }
 .dropdown-content .add-account-btn {
-  background: transparent;
-  color: #333;
+  /* make Add Account appear as a blue secondary button like Manage Accounts */
+  background: #2196F3;
+  color: white;
   font-weight: 600;
-  padding: 8px 0;
+  padding: 8px 12px;
+  border-radius: 8px;
+  display: inline-block;
+  margin-right: 8px;
 }
 .dropdown-content .account-item {
   background: transparent;

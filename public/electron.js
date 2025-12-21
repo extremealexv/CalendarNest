@@ -314,6 +314,15 @@ ipcMain.handle('open-auth-window', async (event, authUrl) => {
 
       authWindow.loadURL(url);
 
+      // When auth window gains focus (e.g., user clicked into an input), ensure OS keyboard is visible
+      try {
+        authWindow.on('focus', () => {
+          try {
+            if (process.platform === 'linux') tryStartOsKeyboard();
+          } catch (e) { console.debug('authWindow focus show OS keyboard failed', e); }
+        });
+      } catch (e) { /* ignore */ }
+
       // We don't attempt to capture the redirect here when using loopback URIs
       // because the loopback server will receive the request. Still listen for
       // navigation events to detect direct redirects that match a configured
@@ -516,20 +525,36 @@ const tryStartOsKeyboard = () => {
         setTimeout(() => {
           try {
             // Try wmctrl first (use common title variants)
-            try { spawn2('wmctrl', ['-a', c.cmd]); } catch (e) {}
-            try { spawn2('wmctrl', ['-a', 'Onboard']); } catch (e) {}
+            try {
+              const p1 = spawn2('wmctrl', ['-a', c.cmd]);
+              if (p1 && p1.on) p1.on('error', (err) => { console.debug('wmctrl error (activate):', err && err.message); });
+            } catch (e) { console.debug('wmctrl spawn threw', e && e.message); }
+
+            try {
+              const p2 = spawn2('wmctrl', ['-a', 'Onboard']);
+              if (p2 && p2.on) p2.on('error', (err) => { console.debug('wmctrl error (activate Onboard):', err && err.message); });
+            } catch (e) { console.debug('wmctrl spawn threw for Onboard', e && e.message); }
+
             // Try xdotool as alternative: search by name and activate
             try {
               const xdSearch = spawn2('xdotool', ['search', '--name', c.cmd]);
               let out = '';
-              xdSearch.stdout && xdSearch.stdout.on('data', d => out += d.toString());
-              xdSearch.on('close', () => {
-                if (out.trim()) {
-                  const id = out.trim().split(/\s+/)[0];
-                  try { spawn2('xdotool', ['windowactivate', id]); } catch (e) {}
-                }
-              });
-            } catch (e) {}
+              if (xdSearch && xdSearch.stdout && xdSearch.stdout.on) xdSearch.stdout.on('data', d => out += d.toString());
+              if (xdSearch && xdSearch.on) {
+                xdSearch.on('error', (err) => { console.debug('xdotool search error:', err && err.message); });
+                xdSearch.on('close', () => {
+                  try {
+                    if (out.trim()) {
+                      const id = out.trim().split(/\s+/)[0];
+                      try {
+                        const act = spawn2('xdotool', ['windowactivate', id]);
+                        if (act && act.on) act.on('error', (err) => { console.debug('xdotool windowactivate error:', err && err.message); });
+                      } catch (e) { console.debug('xdotool windowactivate spawn threw', e && e.message); }
+                    }
+                  } catch (ee) { console.debug('xdotool close handler error', ee && ee.message); }
+                });
+              }
+            } catch (e) { console.debug('xdotool attempt failed', e && e.message); }
           } catch (e) { console.debug('raise OS keyboard attempt failed', e); }
         }, 300);
       } catch (e) {}
