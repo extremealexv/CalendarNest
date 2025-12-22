@@ -164,10 +164,15 @@ const MonthView = ({
 
   // Listen for global trigger dispatched when wake word is detected
   React.useEffect(() => {
-    const handler = () => {
+    const handler = (ev) => {
       try {
+        // Log the incoming wake trigger and its payload (if any)
+        try { console.debug('[MonthView] wake trigger event detail=', ev && ev.detail); } catch (e) {}
         // If we're already actively listening, ignore the wake trigger
-        if (listening) return;
+        if (listening) {
+          try { console.debug('[MonthView] wake trigger ignored because already listening'); } catch (e) {}
+          return;
+        }
         // small visual indicator: set listening true while voice flow runs
         handleStartVoice();
       } catch (e) { console.debug('wake trigger handler failed', e); }

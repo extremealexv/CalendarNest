@@ -58,14 +58,18 @@ function App() {
       });
       wakeWordService.addWakeListener((payload) => {
         try {
-          // log receipt of wake event for debugging
+          // Always write a console.debug so journalctl will capture it even if electronAPI is not present
+          try { console.debug('[App] wake event received', payload); } catch (e) {}
+          // Also attempt rendererLog if available
           try {
             if (window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[App] wake event received ' + JSON.stringify(payload));
           } catch (e) {
             // ignore logging errors
           }
           // dispatch a global event that MonthView listens for to start the normal voice flow
-          window.dispatchEvent(new CustomEvent('famsync:trigger-voice-search', { detail: payload }));
+          try { window.dispatchEvent(new CustomEvent('famsync:trigger-voice-search', { detail: payload })); } catch (e) { /* ignore */ }
+          // compatibility: also dispatch a simple event name without detail so older handlers that don't expect CustomEvent still fire
+          try { window.dispatchEvent(new Event('famsync:trigger-voice-search')); } catch (e) { /* ignore */ }
         } catch (e) { console.debug('wake event dispatch failed', e); }
       });
       // start with default language; keep running

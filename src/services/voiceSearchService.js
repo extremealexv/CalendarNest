@@ -124,6 +124,7 @@ class VoiceSearchService {
   // Given recognized text, ask Gemini and synthesize an answer
   async handleQueryText(text, { events = [], accounts = [], startDate, endDate, lang = defaultLang, onAnswerText, onTtsDone } = {}) {
     try {
+      try { console.debug('[voiceSearch] handleQueryText entry text=', text); } catch (e) {}
       // First, ask Gemini to interpret the user's query into a strict JSON that
       // contains the date range and keywords to use for searching events.
       let effectiveEvents = events || [];
