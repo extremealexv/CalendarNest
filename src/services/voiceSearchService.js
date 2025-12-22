@@ -131,6 +131,11 @@ class VoiceSearchService {
       let queryEnd = endDate;
 
       let interp = null;
+      // Track whether a server fetch returned events in this handleQueryText run
+      // declared here so it's visible both inside the interpreter block and
+      // in the outer deterministic-summary logic below (avoids ReferenceError).
+      let lastFetchTotal = 0;
+
       try {
         const now = new Date();
         interp = await geminiService.interpretQuery(text, now, { lang });
@@ -154,8 +159,6 @@ class VoiceSearchService {
           }
         }
 
-      // Track whether a server fetch returned events in this handleQueryText run
-      let lastFetchTotal = 0;
 
       // Helper to fetch events for a range across accounts and merge
         const fetchAndMerge = async (s, e) => {
