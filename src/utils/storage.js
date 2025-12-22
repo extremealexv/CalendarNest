@@ -59,7 +59,7 @@ export const storageUtils = {
       console.error('Failed to save selected mic to storage', e);
       return false;
     }
-  }
+  },
 
   // Wake config persisted for the wake-word service
   getWakeConfig() {
