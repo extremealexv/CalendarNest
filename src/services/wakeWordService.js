@@ -11,6 +11,40 @@ const getVoiceSearchService = () => {
   }
 };
 
+// Simple Levenshtein distance implementation (small strings only)
+function levenshtein(a, b) {
+  if (!a) return b ? b.length : 0;
+  if (!b) return a ? a.length : 0;
+  a = String(a);
+  b = String(b);
+  const al = a.length;
+  const bl = b.length;
+  const row = new Array(bl + 1);
+  for (let j = 0; j <= bl; j++) row[j] = j;
+  for (let i = 1; i <= al; i++) {
+    let prev = row[0];
+    row[0] = i;
+    for (let j = 1; j <= bl; j++) {
+      const tmp = row[j];
+      const cost = a.charAt(i - 1) === b.charAt(j - 1) ? 0 : 1;
+      row[j] = Math.min(row[j] + 1, row[j - 1] + 1, prev + cost);
+      prev = tmp;
+    }
+  }
+  return row[bl];
+}
+
+// lazy storage utils
+let _storageUtils = null;
+const getStorage = () => {
+  try {
+    if (!_storageUtils) _storageUtils = require('../utils/storage').storageUtils;
+    return _storageUtils;
+  } catch (e) {
+    return null;
+  }
+};
+
 class WakeWordService {
   constructor() {
     this.recognition = null;
@@ -23,6 +57,31 @@ class WakeWordService {
     this._stoppedByUser = false;
     this._usingVoskFallback = false;
     this._voskLoopRunning = false;
+    // Read persisted wake config (if any)
+    try {
+      const s = getStorage();
+      const cfg = s && typeof s.getWakeConfig === 'function' ? s.getWakeConfig() : null;
+      if (cfg) {
+        this._voskOnly = !!cfg.voskOnly;
+        this._voskClipMs = Number(cfg.voskClipMs) || 1600;
+        this._extraWakeWords = Array.isArray(cfg.extraWakeWords) ? cfg.extraWakeWords.slice() : [];
+        this._fuzzyTolerance = Number(cfg.fuzzyTolerance) || 1;
+      } else {
+        this._voskOnly = false;
+        this._voskClipMs = 1600; // slightly larger clip to capture full wake words
+        this._extraWakeWords = [];
+        this._fuzzyTolerance = 1; // Levenshtein tolerance
+      }
+      // merge extra wake words if present
+      if (this._extraWakeWords && this._extraWakeWords.length) {
+        this.wakeWords = Array.from(new Set([...this.wakeWords, ...this._extraWakeWords]));
+      }
+    } catch (e) {
+      this._voskOnly = false;
+      this._voskClipMs = 1600;
+      this._extraWakeWords = [];
+      this._fuzzyTolerance = 1;
+    }
   }
 
   addWakeListener(cb) { this.wakeListeners.add(cb); }
@@ -59,6 +118,14 @@ class WakeWordService {
     try {
       this._starting = true;
       this._stoppedByUser = false;
+      // If configured to use VOSK-only, skip SpeechRecognition and start the VOSK loop
+      if (this._voskOnly) {
+        this._starting = false;
+        this._usingVoskFallback = true;
+        this._startVoskFallbackLoop().catch(() => {});
+        return;
+      }
+
       this.recognition = new SpeechRecognition();
       this.recognition.lang = this.lang;
       this.recognition.interimResults = true;
@@ -83,17 +150,31 @@ class WakeWordService {
         } catch (e) {}
 
         if (text) {
-          for (const w of this.wakeWords) {
-            try {
-              const wLower = (w || '').toLowerCase();
-              // use word-boundary matching to avoid accidental substring matches
-              const esc = wLower.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-              const pattern = new RegExp('\\b' + esc + '\\b', 'i');
-              if (pattern.test(text)) {
-                this._emitWake({ word: w, text });
-                break;
-              }
-            } catch (e) {}
+          try {
+            // Tokenize using Unicode letters so boundaries work for Cyrillic and other scripts
+            const tokens = (text.match(/\p{L}+/gu) || []).map(t => t.toLowerCase());
+            for (const w of this.wakeWords) {
+              try {
+                const wLower = (w || '').toLowerCase();
+                if (tokens.includes(wLower)) {
+                  this._emitWake({ word: w, text });
+                  break;
+                }
+              } catch (e) {}
+            }
+          } catch (e) {
+            // fallback to previous word-boundary regex for environments without Unicode support
+            for (const w of this.wakeWords) {
+              try {
+                const wLower = (w || '').toLowerCase();
+                const esc = wLower.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                const pattern = new RegExp('\\b' + esc + '\\b', 'i');
+                if (pattern.test(text)) {
+                  this._emitWake({ word: w, text });
+                  break;
+                }
+              } catch (e) {}
+            }
           }
         }
       };
@@ -153,9 +234,51 @@ class WakeWordService {
       }
       // stop any running VOSK fallback loop
       this._usingVoskFallback = false;
+      // persist current voskOnly setting
+      try {
+        const s = getStorage();
+        if (s && typeof s.saveWakeConfig === 'function') {
+          s.saveWakeConfig({ voskOnly: !!this._voskOnly, voskClipMs: this._voskClipMs, extraWakeWords: this._extraWakeWords, fuzzyTolerance: this._fuzzyTolerance });
+        }
+      } catch (e) {}
     } catch (e) {}
     this.listening = false;
     this._emitState();
+  }
+
+  // Control API
+  setVoskOnly(flag) {
+    try { this._voskOnly = !!flag; } catch (e) {}
+    try {
+      const s = getStorage();
+      if (s && typeof s.saveWakeConfig === 'function') {
+        s.saveWakeConfig({ voskOnly: !!this._voskOnly, voskClipMs: this._voskClipMs, extraWakeWords: this._extraWakeWords, fuzzyTolerance: this._fuzzyTolerance });
+      }
+    } catch (e) {}
+    // if currently running, restart to apply change
+    try {
+      this.stop();
+      if (this._voskOnly) this._startVoskFallbackLoop().catch(() => {});
+      else this.start({ lang: this.lang, wakeWords: this.wakeWords });
+    } catch (e) {}
+  }
+
+  setVoskClipMs(ms) {
+    try { this._voskClipMs = Number(ms) || this._voskClipMs; } catch (e) {}
+  }
+
+  addExtraWakeWords(words) {
+    try {
+      if (!Array.isArray(words)) words = [String(words)];
+      this._extraWakeWords = Array.from(new Set([...(this._extraWakeWords || []), ...words.map(w => String(w).toLowerCase())]));
+      this.wakeWords = Array.from(new Set([...this.wakeWords, ...this._extraWakeWords]));
+      const s = getStorage();
+      if (s && typeof s.saveWakeConfig === 'function') s.saveWakeConfig({ voskOnly: !!this._voskOnly, voskClipMs: this._voskClipMs, extraWakeWords: this._extraWakeWords, fuzzyTolerance: this._fuzzyTolerance });
+    } catch (e) {}
+  }
+
+  setFuzzyTolerance(n) {
+    try { this._fuzzyTolerance = Math.max(0, Math.floor(Number(n) || 0)); } catch (e) {}
   }
 
   async _startVoskFallbackLoop() {
@@ -170,7 +293,7 @@ class WakeWordService {
       while (this._usingVoskFallback && !this._stoppedByUser) {
         try {
           // record a short clip (1.2s) to check for wake word
-          const blob = await svc.recordAudio({ ms: 1200 });
+          const blob = await svc.recordAudio({ ms: this._voskClipMs });
           // try local VOSK server
           let txt = '';
           try {
@@ -181,17 +304,53 @@ class WakeWordService {
           if (txt) {
             try { if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[wakeWord] VOSK onresult text=' + txt); } catch (e) {}
             const text = (txt || '').toString().toLowerCase();
-            for (const w of this.wakeWords) {
-              try {
-                const esc = (w || '').toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
-                const pattern = new RegExp('\\b' + esc + '\\b', 'i');
-                if (pattern.test(text)) {
-                  this._emitWake({ word: w, text });
-                  // after a successful wake, wait a short cooldown before continuing
-                  await new Promise(r => setTimeout(r, 1200));
-                  break;
-                }
-              } catch (e) {}
+            // Tokenize (Unicode-aware) and perform exact + fuzzy matching
+            let matched = false;
+            try {
+              const tokens = (text.match(/\p{L}+/gu) || []).map(t => t.toLowerCase());
+              for (const w of this.wakeWords) {
+                try {
+                  const wLower = (w || '').toLowerCase();
+                  // exact token match
+                  if (tokens.includes(wLower)) {
+                    this._emitWake({ word: w, text });
+                    matched = true;
+                    break;
+                  }
+                  // fuzzy match: check tokens against wake word using Levenshtein distance
+                  for (const tok of tokens) {
+                    try {
+                      const d = levenshtein(tok, wLower);
+                      // tolerance: use configured fuzzy tolerance, but scale for short words
+                      const tol = this._fuzzyTolerance || 1;
+                      const maxAllowed = Math.max(tol, Math.floor(wLower.length * 0.25));
+                      if (d <= maxAllowed) {
+                        this._emitWake({ word: w, text });
+                        matched = true;
+                        break;
+                      }
+                    } catch (e) {}
+                  }
+                  if (matched) break;
+                } catch (e) {}
+              }
+            } catch (e) {
+              // fallback regex-based matching
+              for (const w of this.wakeWords) {
+                try {
+                  const esc = (w || '').toLowerCase().replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
+                  const pattern = new RegExp('\\b' + esc + '\\b', 'i');
+                  if (pattern.test(text)) {
+                    this._emitWake({ word: w, text });
+                    matched = true;
+                    break;
+                  }
+                } catch (e) {}
+              }
+            }
+            if (matched) {
+              // after a successful wake, wait a short cooldown before continuing
+              await new Promise(r => setTimeout(r, 1200));
             }
           }
         } catch (recErr) {

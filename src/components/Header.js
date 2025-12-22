@@ -3,6 +3,7 @@ import { format } from 'date-fns';
 import { safeFormat, safeParse } from '../utils/dateUtils';
 import { addDays, addMonths } from 'date-fns';
 import './Header.css';
+import { storageUtils } from '../utils/storage';
 
 const Header = ({ 
   accounts, 
@@ -27,6 +28,14 @@ const Header = ({
         return () => { try { svc.removeStateListener(cb); } catch (e) {} };
       }
     } catch (e) { /* ignore */ }
+  }, []);
+  // VOSK-only toggle persisted in storage
+  const [voskOnly, setVoskOnly] = React.useState(false);
+  React.useEffect(() => {
+    try {
+      const cfg = storageUtils.getWakeConfig();
+      if (cfg && typeof cfg.voskOnly !== 'undefined') setVoskOnly(!!cfg.voskOnly);
+    } catch (e) {}
   }, []);
   const [editingId, setEditingId] = React.useState(null);
   const [editingValue, setEditingValue] = React.useState('');
@@ -112,7 +121,23 @@ const Header = ({
 
       <div className="header-right">
         <div style={{ display: 'flex', alignItems: 'center', marginRight: 12 }}>
-          <div className={`wake-indicator ${wakeListening ? 'on' : 'off'}`} title={wakeListening ? 'Listening for wake word' : 'Wake word listener inactive'} />
+            <div className={`wake-indicator ${wakeListening ? 'on' : 'off'}`} title={wakeListening ? 'Listening for wake word' : 'Wake word listener inactive'} />
+            <button
+              className={`btn btn-small ${voskOnly ? 'active' : ''}`}
+              title={voskOnly ? 'Using local VOSK for wake detection' : 'Use browser recognizer (may require network)'}
+              onClick={() => {
+                try {
+                  const svc = require('../services/wakeWordService').wakeWordService;
+                  const newVal = !voskOnly;
+                  setVoskOnly(newVal);
+                  if (svc && typeof svc.setVoskOnly === 'function') svc.setVoskOnly(newVal);
+                  // persist via storageUtils
+                  try { storageUtils.saveWakeConfig({ ...(storageUtils.getWakeConfig() || {}), voskOnly: newVal }); } catch (e) {}
+                } catch (e) { console.debug('Failed to toggle VOSK-only', e); }
+              }}
+            >
+              VOSK
+            </button>
         </div>
         <div className="view-switcher">
           <button

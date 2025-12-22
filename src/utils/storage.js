@@ -1,6 +1,7 @@
 // Browser storage utilities
 const ACCOUNTS_KEY = 'famsync_accounts';
 const MIC_KEY = 'famsync_selected_mic';
+const WAKE_CONFIG_KEY = 'famsync_wake_config';
 
 export const storageUtils = {
   getAccounts() {
@@ -56,6 +57,32 @@ export const storageUtils = {
       return true;
     } catch (e) {
       console.error('Failed to save selected mic to storage', e);
+      return false;
+    }
+  }
+
+  // Wake config persisted for the wake-word service
+  getWakeConfig() {
+    try {
+      const raw = localStorage.getItem(WAKE_CONFIG_KEY);
+      if (!raw) return null;
+      return JSON.parse(raw);
+    } catch (e) {
+      console.error('Failed to read wake config from storage', e);
+      return null;
+    }
+  },
+
+  saveWakeConfig(cfg) {
+    try {
+      if (!cfg) {
+        localStorage.removeItem(WAKE_CONFIG_KEY);
+      } else {
+        localStorage.setItem(WAKE_CONFIG_KEY, JSON.stringify(cfg));
+      }
+      return true;
+    } catch (e) {
+      console.error('Failed to save wake config to storage', e);
       return false;
     }
   }
