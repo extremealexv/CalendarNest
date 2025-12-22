@@ -56,7 +56,8 @@ function App() {
       wakeWordService.addStateListener((listening) => {
         try { console.debug('[App] wakeWord listening=', listening); } catch (e) {}
       });
-      wakeWordService.addWakeListener((payload) => {
+  try { console.debug('[App] registering wake listener'); } catch (e) {}
+  wakeWordService.addWakeListener((payload) => {
         try {
           // Always write a console.debug so journalctl will capture it even if electronAPI is not present
           try { console.debug('[App] wake event received', payload); } catch (e) {}

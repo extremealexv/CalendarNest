@@ -91,6 +91,8 @@ class WakeWordService {
 
   _emitWake(payload) {
     try {
+      // Log emit and how many registered listeners we have
+      try { console.debug('[wakeWord] emitWake payload=', payload, 'listenersCount=', this.wakeListeners ? this.wakeListeners.size : 0); } catch (e) {}
       if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') {
         try {
           window.electronAPI.rendererLog('[wakeWord] emitWake ' + JSON.stringify(payload));
@@ -99,8 +101,20 @@ class WakeWordService {
           window.electronAPI.rendererLog('[wakeWord] emitWake');
         }
       }
+      // Also dispatch the global DOM event here as a fallback so components listening
+      // directly on window will receive the wake even if no app-level listener is present.
+      try {
+        try { window.dispatchEvent(new CustomEvent('famsync:trigger-voice-search', { detail: payload })); } catch (e) { /* ignore */ }
+        try { window.dispatchEvent(new Event('famsync:trigger-voice-search')); } catch (e) { /* ignore */ }
+      } catch (e) { /* ignore */ }
     } catch (e) {}
-    for (const cb of Array.from(this.wakeListeners)) try { cb(payload); } catch (e) {}
+    for (const cb of Array.from(this.wakeListeners || [])) {
+      try {
+        cb(payload);
+      } catch (e) {
+        try { console.warn('[wakeWord] wake listener threw', e && e.message ? e.message : e); } catch (ex) {}
+      }
+    }
   }
   _emitState() { for (const cb of Array.from(this.stateListeners)) try { cb(this.listening); } catch (e) {} }
 
