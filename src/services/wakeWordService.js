@@ -65,22 +65,23 @@ class WakeWordService {
         this._voskOnly = !!cfg.voskOnly;
         this._voskClipMs = Number(cfg.voskClipMs) || 1600;
         this._extraWakeWords = Array.isArray(cfg.extraWakeWords) ? cfg.extraWakeWords.slice() : [];
-        this._fuzzyTolerance = Number(cfg.fuzzyTolerance) || 1;
+        // allow a slightly more tolerant default on embedded devices
+        this._fuzzyTolerance = Number(cfg.fuzzyTolerance) || 2;
       } else {
-        this._voskOnly = false;
-        this._voskClipMs = 1600; // slightly larger clip to capture full wake words
-        this._extraWakeWords = [];
-        this._fuzzyTolerance = 1; // Levenshtein tolerance
+    this._voskOnly = false;
+    this._voskClipMs = 1600; // slightly larger clip to capture full wake words
+    this._extraWakeWords = [];
+    this._fuzzyTolerance = 2; // Levenshtein tolerance (more tolerant by default)
       }
       // merge extra wake words if present
       if (this._extraWakeWords && this._extraWakeWords.length) {
         this.wakeWords = Array.from(new Set([...this.wakeWords, ...this._extraWakeWords]));
       }
     } catch (e) {
-      this._voskOnly = false;
-      this._voskClipMs = 1600;
-      this._extraWakeWords = [];
-      this._fuzzyTolerance = 1;
+  this._voskOnly = false;
+  this._voskClipMs = 1600;
+  this._extraWakeWords = [];
+  this._fuzzyTolerance = 2;
     }
   }
 
@@ -122,6 +123,13 @@ class WakeWordService {
     if (this.listening || this._starting) return;
     this.lang = lang || this.lang;
     if (wakeWords && wakeWords.length) this.wakeWords = wakeWords;
+
+    // Debug: log start invocation and current configuration
+    try {
+      const cfgMsg = JSON.stringify({ voskOnly: !!this._voskOnly, voskClipMs: this._voskClipMs, fuzzyTolerance: this._fuzzyTolerance, wakeWords: this.wakeWords.slice(0,10) });
+      console.debug('[wakeWord] start called cfg=', cfgMsg);
+      if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[wakeWord] start ' + cfgMsg);
+    } catch (e) {}
 
     const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognition) {
@@ -304,6 +312,11 @@ class WakeWordService {
     this._voskLoopRunning = true;
     this._usingVoskFallback = true;
     try {
+      const msg = '[wakeWord] starting VOSK fallback loop voskClipMs=' + this._voskClipMs + ' wakeWords=' + JSON.stringify(this.wakeWords.slice(0,10));
+      console.debug(msg);
+      if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog(msg);
+    } catch (e) {}
+    try {
       while (this._usingVoskFallback && !this._stoppedByUser) {
         try {
           // record a short clip (1.2s) to check for wake word
@@ -364,8 +377,12 @@ class WakeWordService {
             }
             if (matched) {
               // after a successful wake, wait a short cooldown before continuing
+              try { if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[wakeWord] matched word, text=' + text); } catch (e) {}
               await new Promise(r => setTimeout(r, 1200));
             }
+          } else {
+            try { if (window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function') window.electronAPI.rendererLog('[wakeWord] VOSK onresult empty'); } catch (e) {}
+          }
           }
         } catch (recErr) {
           try { window && window.electronAPI && typeof window.electronAPI.rendererLog === 'function' && window.electronAPI.rendererLog('[wakeWord] VOSK record error ' + (recErr && recErr.message || recErr)); } catch (e) {}
