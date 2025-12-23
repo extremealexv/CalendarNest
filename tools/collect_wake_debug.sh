@@ -65,18 +65,20 @@ else
 fi
 
 # 3) Capture journalctl logs for time window around now
-SINCE_TS="$(date --iso-8601=seconds -d "-$JOURNAL_SECONDS_BEFORE seconds")"
-UNTIL_TS="$(date --iso-8601=seconds -d "+$JOURNAL_SECONDS_AFTER seconds")"
+NOW_EPOCH=$(date +%s)
+SINCE_EPOCH=$((NOW_EPOCH - JOURNAL_SECONDS_BEFORE))
+UNTIL_EPOCH=$((NOW_EPOCH + JOURNAL_SECONDS_AFTER))
 JOURNAL_FULL="$OUTDIR/journal_full.log"
 JOURNAL_FILTERED="$OUTDIR/journal_filtered.log"
 
-echo "Collecting journalctl from $SINCE_TS to $UNTIL_TS"
+echo "Collecting journalctl from epoch @$SINCE_EPOCH to @$UNTIL_EPOCH"
+# Use epoch (@<seconds>) format which is robust across locales/timezone formats
 # Try to capture system journal — may need sudo
-if journalctl --since="$SINCE_TS" --until="$UNTIL_TS" > "$JOURNAL_FULL" 2>/dev/null; then
+if journalctl --since="@$SINCE_EPOCH" --until="@$UNTIL_EPOCH" > "$JOURNAL_FULL" 2>/dev/null; then
   echo "Saved full journal to $JOURNAL_FULL"
 else
   echo "journalctl read failed without sudo; retrying with sudo..."
-  sudo journalctl --since="$SINCE_TS" --until="$UNTIL_TS" > "$JOURNAL_FULL" || true
+  sudo journalctl --since="@$SINCE_EPOCH" --until="@$UNTIL_EPOCH" > "$JOURNAL_FULL" || true
 fi
 
 # Filter for relevant keywords
